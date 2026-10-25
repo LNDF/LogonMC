@@ -29,6 +29,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -48,6 +50,9 @@ public final class LogonMCPlugin {
     private final Path dataDirectory;
     private final ConfigLoader configLoader;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    // Password hashing, sized by auth.hash-threads. Callers wait on the plugin executor.
+    private final ThreadPoolExecutor hashExecutor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(), Thread.ofPlatform().name("LogonMC-hash-", 0).daemon().factory());
 
     private volatile PluginConfig config;
     private volatile Messages messages;
@@ -107,6 +112,7 @@ public final class LogonMCPlugin {
         executor.shutdown();
         try {
             executor.awaitTermination(10, TimeUnit.SECONDS);
+            hashExecutor.shutdown();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -120,7 +126,19 @@ public final class LogonMCPlugin {
         Messages loadedMessages = configLoader.loadMessages();
         this.config = loaded;
         this.messages = loadedMessages;
-        this.hashers = new Hashers(loaded.auth().hashAlgorithm());
+        resizeHashExecutor(loaded.auth().hashThreads());
+        this.hashers = new Hashers(loaded.auth().hashAlgorithm(), hashExecutor);
+    }
+
+    private void resizeHashExecutor(int threads) {
+        // The core size may never exceed the maximum, so the order depends on the direction.
+        if (threads > hashExecutor.getMaximumPoolSize()) {
+            hashExecutor.setMaximumPoolSize(threads);
+            hashExecutor.setCorePoolSize(threads);
+        } else {
+            hashExecutor.setCorePoolSize(threads);
+            hashExecutor.setMaximumPoolSize(threads);
+        }
     }
 
     /**

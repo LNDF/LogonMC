@@ -50,7 +50,7 @@ class HashersTest {
 
     @Test
     void registryUpgradesOtherAlgorithms() {
-        Hashers hashers = new Hashers(HashAlgorithm.ARGON2ID);
+        Hashers hashers = new Hashers(HashAlgorithm.ARGON2ID, Runnable::run);
         HashedPassword bcrypt = new BCryptHasher().hash("pw123456");
         assertTrue(hashers.verify("pw123456", bcrypt));
         assertTrue(hashers.needsRehash(bcrypt));

@@ -7,9 +7,11 @@ import dev.lndf.logonmc.api.event.PremiumNameChangeEvent;
 import dev.lndf.logonmc.config.PluginConfig;
 import dev.lndf.logonmc.db.StoredUser;
 import dev.lndf.logonmc.db.UserRepository;
+import dev.lndf.logonmc.mojang.LookupLimiter;
 import dev.lndf.logonmc.mojang.MojangProfile;
 import dev.lndf.logonmc.mojang.ProfileLookup;
 import dev.lndf.logonmc.util.Uuids;
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
@@ -77,6 +79,7 @@ public final class LoginResolver {
     private final Supplier<PluginConfig> config;
     private final Function<Object, CompletableFuture<?>> eventFirer;
     private final Logger logger;
+    private final LookupLimiter lookupLimiter;
 
     private final Cache<String, Attempt> attempts = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofMinutes(15)).build();
@@ -88,12 +91,15 @@ public final class LoginResolver {
         this.config = config;
         this.eventFirer = eventFirer;
         this.logger = logger;
+        this.lookupLimiter = new LookupLimiter(() -> config.get().premium().lookupLimit());
     }
 
     /**
      * Pre-login: validate the name and choose online (Mojang) or offline authentication.
+     *
+     * @param source the connecting client's IP, which pays for Mojang lookups its join causes
      */
-    public Decision decide(String name) {
+    public Decision decide(String name, InetAddress source) {
         PluginConfig cfg = config.get();
         if (!cfg.names().pattern().matcher(name).matches()) {
             return Decision.deny("kick.invalid-name");
@@ -121,6 +127,12 @@ public final class LoginResolver {
         }
 
         // 2. Nobody here owns the name. Mojang says whether it is premium, and whose it is.
+        // Refused outright, never let in as cracked: otherwise a client could make its own lookups
+        // fail and register a premium name.
+        if (!mojang.isCached(name) && !lookupLimiter.tryAcquire(source)) {
+            logger.info("Refusing {} from {}: Mojang lookup limit reached", name, source.getHostAddress());
+            return Decision.deny("kick.lookup-limit");
+        }
         Optional<MojangProfile> profile;
         try {
             profile = mojang.lookup(name);
@@ -145,6 +157,26 @@ public final class LoginResolver {
             return Decision.wrongCase(profile.get().name());
         }
         return Decision.ONLINE;
+    }
+
+    /**
+     * Checked again at /register for a player who joined in offline mode: refuses a protected
+     * premium name, which gets in as cracked when the Mojang lookup at join failed. Blocks on the
+     * Mojang lookup.
+     *
+     * @return the messages.yml key to refuse with, or null to allow the registration
+     */
+    public @Nullable String offlineRegistrationRefusal(String name) {
+        PluginConfig cfg = config.get();
+        if (!cfg.premium().protectPremiumNames()) {
+            return null;
+        }
+        try {
+            return mojang.lookup(name).isPresent() ? "auth.premium-name" : null;
+        } catch (ProfileLookup.LookupException e) {
+            logger.warn("Mojang lookup for {} failed at registration: {}", name, e.getMessage());
+            return cfg.premium().denyOnMojangError() ? "auth.mojang-unavailable" : null;
+        }
     }
 
     /**

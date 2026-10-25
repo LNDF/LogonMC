@@ -18,8 +18,10 @@ public final class PlayerAuthState {
     private volatile @Nullable String lastServer;
     private final AtomicInteger failedAttempts = new AtomicInteger();
     private final AtomicBoolean premiumSuggested = new AtomicBoolean();
+    private final AtomicBoolean passwordCheck = new AtomicBoolean();
     private List<ScheduledTask> promptTasks = List.of();
     private @Nullable Runnable promptCleanup;
+    private boolean closed;
 
     PlayerAuthState(@Nullable StoredUser user) {
         this.user = user;
@@ -69,13 +71,38 @@ public final class PlayerAuthState {
     }
 
     /**
+     * Claims the player's single password check. Commands that check or hash a password run one
+     * at a time per player, so a flood of them can't run many guesses in parallel.
+     *
+     * @return false if a check is already running or the wrong-password delay hasn't passed
+     */
+    boolean beginPasswordCheck() {
+        return passwordCheck.compareAndSet(false, true);
+    }
+
+    void endPasswordCheck() {
+        passwordCheck.set(false);
+    }
+
+    /**
      * Replaces the running login prompt: its scheduled tasks, and an action that removes what it
-     * shows (the boss bar).
+     * shows (the boss bar). After {@link #close} the prompt is stopped right away instead.
      */
     synchronized void startPrompt(@Nullable Runnable cleanup, ScheduledTask... tasks) {
         cancelTasks();
         this.promptTasks = List.of(tasks);
         this.promptCleanup = cleanup;
+        if (closed) {
+            cancelTasks();
+        }
+    }
+
+    /**
+     * The player disconnected: stops the prompt and any prompt started later.
+     */
+    synchronized void close() {
+        closed = true;
+        cancelTasks();
     }
 
     /**

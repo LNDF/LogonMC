@@ -23,6 +23,7 @@ import dev.lndf.logonmc.db.UserRepository;
 import dev.lndf.logonmc.mojang.MojangProfile;
 import dev.lndf.logonmc.mojang.ProfileLookup;
 import dev.lndf.logonmc.util.Uuids;
+import java.net.InetAddress;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ import org.spongepowered.configurate.serialize.SerializationException;
 
 class LoginResolverTest {
 
+    private static final InetAddress CLIENT = InetAddress.getLoopbackAddress();
     private static final UUID NOTCH_PREMIUM = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
 
     private Database db;
@@ -107,24 +109,24 @@ class LoginResolverTest {
 
     @Test
     void rejectsInvalidNames() {
-        assertEquals(Mode.DENY, resolver.decide("ab").mode());
-        assertEquals(Mode.DENY, resolver.decide("this_name_is_too_long").mode());
-        assertEquals("kick.invalid-name", resolver.decide("bad-name").messageKey());
+        assertEquals(Mode.DENY, resolver.decide("ab", CLIENT).mode());
+        assertEquals(Mode.DENY, resolver.decide("this_name_is_too_long", CLIENT).mode());
+        assertEquals("kick.invalid-name", resolver.decide("bad-name", CLIENT).messageKey());
     }
 
     @Test
     void rejectsWrongCaseOfRegisteredName() {
         cracked("Steve");
-        Decision decision = resolver.decide("steve");
+        Decision decision = resolver.decide("steve", CLIENT);
         assertEquals(Mode.DENY, decision.mode());
         assertEquals("kick.wrong-case", decision.messageKey());
         assertEquals("Steve", decision.correctName());
-        assertEquals(Mode.OFFLINE, resolver.decide("Steve").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Steve", CLIENT).mode());
     }
 
     @Test
     void rejectsWrongCaseOfProtectedPremiumName() {
-        Decision decision = resolver.decide("notch");
+        Decision decision = resolver.decide("notch", CLIENT);
         assertEquals(Mode.DENY, decision.mode());
         assertEquals("Notch", decision.correctName());
     }
@@ -132,46 +134,46 @@ class LoginResolverTest {
     @Test
     void unprotectedPremiumNameHasNoCaseCheck() {
         unprotected();
-        assertEquals(Mode.OFFLINE, resolver.decide("notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("notch", CLIENT).mode());
     }
 
     @Test
     void caseCheckCanBeDisabled() {
         configure(root -> set(root, false, "names", "case-check"));
         cracked("Steve");
-        assertEquals(Mode.OFFLINE, resolver.decide("steve").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("steve", CLIENT).mode());
     }
 
     // ---- Pre-login decision ----
 
     @Test
     void unknownNamesJoinOffline() {
-        assertEquals(Mode.OFFLINE, resolver.decide("Nobody123").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Nobody123", CLIENT).mode());
     }
 
     @Test
     void protectedPremiumNameNeedsMojangToRegister() {
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
     void unprotectedPremiumNameCanBeRegisteredCracked() {
         unprotected();
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
     void crackedAccountKeepsPremiumName() {
         cracked("Notch");
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
     void linkedAccountJoinsOnlineEvenUnprotected() {
         unprotected();
         linked("Notch", NOTCH_PREMIUM);
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
@@ -179,9 +181,9 @@ class LoginResolverTest {
         unprotected();
         linked("Notch", NOTCH_PREMIUM);
         mojang.add("Notch2", NOTCH_PREMIUM);
-        assertEquals(Mode.ONLINE, resolver.decide("Notch2").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch2", CLIENT).mode());
         // The old name no longer exists on Mojang, so anyone may register it.
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
@@ -190,17 +192,49 @@ class LoginResolverTest {
         linked("Notch", NOTCH_PREMIUM);
         mojang.add("Notch2", NOTCH_PREMIUM);
         mojang.add("Notch", UUID.randomUUID());
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test
     void mojangOutage() {
         mojang.failing = true;
-        assertEquals(Mode.OFFLINE, resolver.decide("Someone").mode());
+        assertEquals("kick.mojang-unavailable", resolver.decide("Someone", CLIENT).messageKey());
         linked("Linked_one", UUID.randomUUID());
-        assertEquals(Mode.ONLINE, resolver.decide("Linked_one").mode());
-        configure(root -> set(root, true, "premium", "deny-on-mojang-error"));
-        assertEquals("kick.mojang-unavailable", resolver.decide("Someone").messageKey());
+        assertEquals(Mode.ONLINE, resolver.decide("Linked_one", CLIENT).mode());
+        configure(root -> set(root, false, "premium", "deny-on-mojang-error"));
+        assertEquals(Mode.OFFLINE, resolver.decide("Someone", CLIENT).mode());
+    }
+
+    @Test
+    void lookupLimitPerIp() throws Exception {
+        configure(root -> set(root, 2, "premium", "lookup-limit", "max-lookups-per-ip"));
+        InetAddress other = InetAddress.getByName("10.0.0.1");
+        assertEquals(Mode.OFFLINE, resolver.decide("Name_one", CLIENT).mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
+        assertEquals("kick.lookup-limit", resolver.decide("Name_two", CLIENT).messageKey());
+        // Even with deny-on-mojang-error off, so a client can't fail its own lookups to join cracked.
+        configure(root -> {
+            set(root, 2, "premium", "lookup-limit", "max-lookups-per-ip");
+            set(root, false, "premium", "deny-on-mojang-error");
+        });
+        assertEquals("kick.lookup-limit", resolver.decide("Name_two", CLIENT).messageKey());
+        assertEquals(Mode.OFFLINE, resolver.decide("Name_two", other).mode());
+        // Registered names need no lookup.
+        cracked("Steve");
+        assertEquals(Mode.OFFLINE, resolver.decide("Steve", CLIENT).mode());
+    }
+
+    @Test
+    void registrationRechecksPremiumNames() {
+        assertEquals("auth.premium-name", resolver.offlineRegistrationRefusal("Notch"));
+        assertNull(resolver.offlineRegistrationRefusal("Someone"));
+        mojang.failing = true;
+        assertEquals("auth.mojang-unavailable", resolver.offlineRegistrationRefusal("Other"));
+        configure(root -> set(root, false, "premium", "deny-on-mojang-error"));
+        assertNull(resolver.offlineRegistrationRefusal("Other"));
+        unprotected();
+        mojang.failing = false;
+        assertNull(resolver.offlineRegistrationRefusal("Notch"));
     }
 
     // ---- Account resolution ----
@@ -240,14 +274,14 @@ class LoginResolverTest {
         StoredUser original = cracked("Notch");
         resolver.requestPremiumCheck("Notch");
 
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
         StoredUser linked = resolver.resolveOnline("Notch", NOTCH_PREMIUM).orElseThrow();
 
         assertEquals(original.uuid(), linked.uuid());
         assertEquals(NOTCH_PREMIUM, linked.premiumUuid());
         assertTrue(linked.hasPassword());
         assertTrue(users.findCrackedByName("Notch").isEmpty());
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
         assertTrue(events.isEmpty());
     }
 
@@ -257,7 +291,7 @@ class LoginResolverTest {
         StoredUser original = cracked("Notch");
         sessions.save(original.uuid(), "1.2.3.4", Instant.now().plus(Duration.ofHours(1)));
         resolver.requestPremiumCheck("Notch");
-        resolver.decide("Notch");
+        resolver.decide("Notch", CLIENT);
 
         StoredUser linked = resolver.resolveOnline("Notch", NOTCH_PREMIUM).orElseThrow();
 
@@ -278,7 +312,7 @@ class LoginResolverTest {
         };
         StoredUser original = cracked("Notch");
         resolver.requestPremiumCheck("Notch");
-        resolver.decide("Notch");
+        resolver.decide("Notch", CLIENT);
 
         StoredUser linked = resolver.resolveOnline("Notch", NOTCH_PREMIUM).orElseThrow();
         assertEquals(original.uuid(), linked.uuid());
@@ -289,9 +323,9 @@ class LoginResolverTest {
     void failedPremiumHandshakeFallsBackToCracked() {
         cracked("Notch");
         resolver.requestPremiumCheck("Notch");
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
         // No resolveOnline: the client could not complete Mojang authentication.
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
         assertNull(users.findByName("Notch").orElseThrow().premiumUuid());
     }
 
@@ -319,7 +353,7 @@ class LoginResolverTest {
         linked("Alt_account", NOTCH_PREMIUM);
         StoredUser owner = cracked("Notch");
         resolver.requestPremiumCheck("Notch");
-        resolver.decide("Notch");
+        resolver.decide("Notch", CLIENT);
         LoginResolver.LoginDeniedException e = assertThrows(LoginResolver.LoginDeniedException.class,
                 () -> resolver.resolveOnline("Notch", NOTCH_PREMIUM));
         assertEquals("kick.premium-already-linked", e.messageKey());
@@ -347,7 +381,7 @@ class LoginResolverTest {
         mojang.add("Notch2", NOTCH_PREMIUM);
         mojang.add("Notch", newOwner);
 
-        assertEquals(Mode.ONLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.ONLINE, resolver.decide("Notch", CLIENT).mode());
         assertTrue(resolver.resolveOnline("Notch", newOwner).isEmpty());
         // They register: a cracked account named Notch next to the stale linked one, nobody renamed.
         UUID uuid = resolver.newAccountUuid("Notch");
@@ -357,7 +391,7 @@ class LoginResolverTest {
         assertEquals(uuid, users.findCrackedByName("Notch").orElseThrow().uuid());
         assertEquals(uuid, users.findByName("Notch").orElseThrow().uuid());
         assertEquals("Notch", users.findByUuid(stale.uuid()).orElseThrow().lastNickname());
-        assertEquals(Mode.OFFLINE, resolver.decide("Notch").mode());
+        assertEquals(Mode.OFFLINE, resolver.decide("Notch", CLIENT).mode());
     }
 
     @Test

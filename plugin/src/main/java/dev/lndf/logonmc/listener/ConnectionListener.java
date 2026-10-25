@@ -43,7 +43,8 @@ public final class ConnectionListener {
         }
         return EventTask.async(() -> {
             try {
-                LoginResolver.Decision decision = resolver.decide(event.getUsername());
+                LoginResolver.Decision decision = resolver.decide(event.getUsername(),
+                        event.getConnection().getRemoteAddress().getAddress());
                 event.setResult(switch (decision.mode()) {
                     case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
                     case OFFLINE -> PreLoginEvent.PreLoginComponentResult.forceOfflineMode();

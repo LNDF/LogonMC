@@ -50,6 +50,11 @@ public final class MojangClient implements ProfileLookup {
         return result;
     }
 
+    @Override
+    public boolean isCached(String name) {
+        return cache.getIfPresent(name.toLowerCase(Locale.ROOT)) != null;
+    }
+
     private Optional<MojangProfile> fetch(String name) throws LookupException {
         if (Instant.now().isBefore(rateLimitedUntil)) {
             throw new LookupException("Mojang API rate limit, backing off", null);

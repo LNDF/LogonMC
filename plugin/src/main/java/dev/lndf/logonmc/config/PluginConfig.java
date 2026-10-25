@@ -31,9 +31,14 @@ public record PluginConfig(
     public record Servers(String auth, List<String> lobby, boolean rememberLastServer) {
     }
 
-    public record Auth(Duration loginTimeout, int maxAttempts, int passwordMinLength, int passwordMaxLength,
-                       HashAlgorithm hashAlgorithm, Set<String> allowedCommands, Duration reminderInterval,
-                       UnsafePasswords unsafePasswords, BossBarSettings bossBar) {
+    public record Auth(Duration loginTimeout, int maxAttempts, Duration wrongPasswordDelay, Lockout lockout,
+                       int passwordMinLength, int passwordMaxLength, HashAlgorithm hashAlgorithm, int hashThreads,
+                       Set<String> allowedCommands, Duration reminderInterval, UnsafePasswords unsafePasswords,
+                       BossBarSettings bossBar) {
+    }
+
+    /** Limits of 0 are disabled. */
+    public record Lockout(int maxFailuresPerIp, int maxFailuresPerAccount, Duration duration) {
     }
 
     public record BossBarSettings(boolean enabled, BossBar.Color color, BossBar.Overlay overlay) {
@@ -49,7 +54,11 @@ public record PluginConfig(
     }
 
     public record Premium(boolean protectPremiumNames, boolean switchUuidOnPremium, boolean suggestPremium,
-                          boolean denyOnMojangError, Duration mojangCache) {
+                          boolean denyOnMojangError, Duration mojangCache, LookupLimit lookupLimit) {
+    }
+
+    /** A limit of 0 is disabled. */
+    public record LookupLimit(int maxLookupsPerIp, Duration window) {
     }
 
     public static PluginConfig load(ConfigurationNode root) throws SerializationException {
@@ -80,9 +89,17 @@ public record PluginConfig(
                 new Auth(
                         Duration.ofSeconds(auth.node("login-timeout-seconds").getLong(60)),
                         Math.max(1, auth.node("max-attempts").getInt(5)),
+                        Duration.ofMillis(Math.max(0, auth.node("wrong-password-delay-millis").getLong(1000))),
+                        new Lockout(
+                                Math.max(0, auth.node("lockout", "max-failures-per-ip").getInt(10)),
+                                Math.max(0, auth.node("lockout", "max-failures-per-account").getInt(20)),
+                                // At most a day, the lifetime of LoginThrottle entries.
+                                Duration.ofMinutes(Math.clamp(auth.node("lockout", "lockout-minutes").getLong(15), 1, 1440))
+                        ),
                         auth.node("password-min-length").getInt(6),
                         auth.node("password-max-length").getInt(64),
                         enumValue(HashAlgorithm.class, auth.node("hash-algorithm").getString("ARGON2ID")),
+                        hashThreads(auth.node("hash-threads").getInt(0)),
                         auth.node("allowed-commands").getList(String.class, List.of("login", "l", "register", "reg"))
                                 .stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet()),
                         Duration.ofSeconds(Math.max(1, auth.node("reminder-interval-seconds").getLong(10))),
@@ -98,7 +115,7 @@ public record PluginConfig(
                 ),
                 new Session(
                         session.node("enabled").getBoolean(true),
-                        Duration.ofMinutes(session.node("duration-minutes").getLong(60))
+                        Duration.ofMinutes(session.node("duration-minutes").getLong(30))
                 ),
                 new Names(
                         Pattern.compile(names.node("pattern").getString("^[A-Za-z0-9_]{3,16}$")),
@@ -108,10 +125,19 @@ public record PluginConfig(
                         premium.node("protect-premium-names").getBoolean(true),
                         premium.node("switch-uuid-on-premium").getBoolean(false),
                         premium.node("suggest-premium").getBoolean(true),
-                        premium.node("deny-on-mojang-error").getBoolean(false),
-                        Duration.ofMinutes(Math.max(1, premium.node("mojang-cache-minutes").getLong(10)))
+                        premium.node("deny-on-mojang-error").getBoolean(true),
+                        Duration.ofMinutes(Math.max(1, premium.node("mojang-cache-minutes").getLong(10))),
+                        new LookupLimit(
+                                Math.max(0, premium.node("lookup-limit", "max-lookups-per-ip").getInt(10)),
+                                // At most a day, the lifetime of LookupLimiter entries.
+                                Duration.ofMinutes(Math.clamp(premium.node("lookup-limit", "window-minutes").getLong(10), 1, 1440))
+                        )
                 )
         );
+    }
+
+    private static int hashThreads(int configured) {
+        return configured > 0 ? configured : Runtime.getRuntime().availableProcessors();
     }
 
     private static <E extends Enum<E>> E enumValue(Class<E> type, String value) throws SerializationException {

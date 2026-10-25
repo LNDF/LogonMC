@@ -11,6 +11,13 @@ public interface ProfileLookup {
      */
     Optional<MojangProfile> lookup(String name) throws LookupException;
 
+    /**
+     * Whether {@link #lookup} would answer without asking Mojang.
+     */
+    default boolean isCached(String name) {
+        return false;
+    }
+
     final class LookupException extends Exception {
         public LookupException(String message, Throwable cause) {
             super(message, cause);

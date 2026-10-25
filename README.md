@@ -3,7 +3,8 @@
 A (mostly) vive-coded Login plugin for Velocity proxies (Minecraft 26.3, Java 25).
 
 - **Premium linking**: everyone registers with a password; players who own their Mojang account can link it with `/premium` and log in automatically from then on.
-- **Sessions**: after a password login, rejoining from the same IP within the session window skips the prompt.
+- **Sessions**: after a password login, rejoining from the same IP within the session window skips the prompt. Sessions trust the IP alone; behind a reverse proxy, enable PROXY protocol (see `config.yml`).
+- **Brute-force protection**: one password check per player at a time, a delay after each wrong password, and lockouts per IP and per account that survive reconnects. Password hashing runs on a bounded thread pool.
 - **Name validation**: names must match a pattern, and a name can't be used with different capitalization than its owner (`steve` is refused when `Steve` exists). Premium names can optionally be reserved for their Mojang owners.
 - **Premium data migration**: linking keeps the account's data (optionally switching it to the Mojang UUID), and linked accounts follow Mojang name changes.
 - **Limbo routing**: unauthenticated players wait on an auth server (e.g. NanoLimbo) and are sent on after login.
