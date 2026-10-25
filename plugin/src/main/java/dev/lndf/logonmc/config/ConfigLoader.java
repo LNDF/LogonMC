@@ -30,9 +30,8 @@ public final class ConfigLoader {
         return new Messages(load("messages.yml"), bundled("messages.yml"));
     }
 
-    /** Lists copied into a new unsafe_lists directory. SECLISTS-LICENSE isn't a .txt, so it isn't read as a list. */
-    private static final List<String> BUNDLED_UNSAFE_LISTS =
-            List.of("common.txt", "seclists-10k-most-common.txt", "SECLISTS-LICENSE");
+    /** Lists copied into a new unsafe_lists directory. */
+    private static final List<String> BUNDLED_UNSAFE_LISTS = List.of("common.txt", "seclists-10k-most-common.txt");
 
     /**
      * The directory of unsafe-password lists. When it doesn't exist yet it is created with the

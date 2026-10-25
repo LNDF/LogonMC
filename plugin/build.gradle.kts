@@ -27,6 +27,11 @@ dependencies {
 }
 
 tasks {
+    // License of the bundled SecLists password list (resources/unsafe_lists).
+    withType<Jar>().configureEach {
+        from(rootProject.file("SECLISTS-LICENSE")) { into("META-INF") }
+    }
+
     shadowJar {
         archiveClassifier = ""
         // sqlite-jdbc and H2 are not relocated: sqlite's JNI symbols are bound to its package name.

@@ -135,10 +135,10 @@ New passwords are hashed with Argon2id (OWASP parameters) by default, or BCrypt 
 
 ### Unsafe passwords
 
-`/register` and `/changepassword` refuse passwords listed in the `.txt` files of `plugins/logonmc/unsafe_lists/`, one password per line. On first start the folder is created with two lists: `common.txt`, about 100 common and Minecraft-themed passwords, and `seclists-10k-most-common.txt`, the 10,000 most common passwords from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, see `SECLISTS-LICENSE` next to it). Delete either one, or add your own files and leaked-password lists (any encoding works). By default the check ignores capitalization (`auth.unsafe-passwords.case-sensitive`). `/logonmc reload` rereads the folder.
+`/register` and `/changepassword` refuse passwords listed in the `.txt` files of `plugins/logonmc/unsafe_lists/`, one password per line. On first start the folder is created with two lists: `common.txt`, about 100 common and Minecraft-themed passwords, and `seclists-10k-most-common.txt`, the 10,000 most common passwords from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, see [`SECLISTS-LICENSE`](SECLISTS-LICENSE)). Delete either one, or add your own files and leaked-password lists (any encoding works). By default the check ignores capitalization (`auth.unsafe-passwords.case-sensitive`). `/logonmc reload` rereads the folder.
 
 Each entry takes about 8 bytes of memory once loaded, so a list of 10 million passwords needs about 80 MB, plus about as much again briefly while loading. Existing passwords aren't affected until they're changed.
 
 ## License
 
-LogonMC and its API are licensed under the [GNU LGPL v3.0](COPYING.LESSER), which builds on the [GNU GPL v3.0](COPYING). The bundled `seclists-10k-most-common.txt` comes from SecLists under the MIT License ([notice](plugin/src/main/resources/unsafe_lists/SECLISTS-LICENSE)). Plugins can use the API under any license. Modified versions of LogonMC or the API must be released under the LGPL.
+LogonMC and its API are licensed under the [GNU LGPL v3.0](COPYING.LESSER), which builds on the [GNU GPL v3.0](COPYING). The bundled `seclists-10k-most-common.txt` comes from SecLists under the MIT License ([notice](SECLISTS-LICENSE)). Plugins can use the API under any license. Modified versions of LogonMC or the API must be released under the LGPL.
