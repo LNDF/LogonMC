@@ -1,0 +1,71 @@
+# LogonMC configuration
+# Changes to database settings need a proxy restart; everything else applies on /logonmc reload.
+
+database:
+  # H2, SQLITE or MYSQL (also works for MariaDB)
+  type: H2
+  mysql:
+    host: localhost
+    port: 3306
+    database: logonmc
+    user: root
+    password: ""
+    properties: "useSSL=false&characterEncoding=utf8&allowPublicKeyRetrieval=true"
+  pool-size: 10
+
+servers:
+  # Server (from velocity.toml) unauthenticated players are held on, e.g. a NanoLimbo instance.
+  auth: limbo
+  # Servers tried in order once a player is authenticated.
+  lobby:
+    - lobby
+  # Send returning players to the server they last played on instead of the lobby.
+  remember-last-server: true
+
+auth:
+  login-timeout-seconds: 60
+  max-attempts: 5
+  password-min-length: 6
+  password-max-length: 64
+  # ARGON2ID (recommended) or BCRYPT. Existing hashes of the other type are upgraded on login.
+  hash-algorithm: ARGON2ID
+  # Commands unauthenticated players may run. Everything else (proxy and backend) is blocked.
+  allowed-commands: [login, l, log, register, reg]
+  reminder-interval-seconds: 10
+
+session:
+  enabled: true
+  # A password login is remembered for this long. Rejoining from the same IP skips the prompt.
+  duration-minutes: 60
+
+names:
+  # Usernames that don't match are refused.
+  pattern: "^[A-Za-z0-9_]{3,16}$"
+  # Refuse a join whose name matches an existing account or a premium account with different
+  # capitalization (e.g. "steve" when "Steve" exists), so one name can't become two accounts.
+  case-check: true
+
+premium:
+  # Every player registers with a password, premium or not. A player who owns the Mojang account of
+  # their name can then run /premium <password> to link it: from then on they join through Mojang
+  # authentication, log in without a password, and keep their account when they change their name.
+  # Accounts that aren't linked are cracked accounts, even if their name is premium.
+  #
+  # Whether a cracked player can register a premium name that no account here has claimed yet.
+  #   true  - no. Registering it requires joining once through Mojang authentication, so only the
+  #           owner of that Mojang account can claim the name (they still register a password).
+  #   false - yes. The first player to /register the name gets it.
+  # Names already registered here always stay with their account, and the current name of a linked
+  # account is always protected.
+  protect-premium-names: true
+  # When an account is linked with /premium, also switch its profile UUID to the Mojang UUID and
+  # fire PremiumMigrationEvent so other plugins can move data.
+  # false keeps the old UUID, so all data on backend servers stays attached to the player.
+  switch-uuid-on-premium: false
+  # After a cracked account logs in, tell the player if their name belongs to a Mojang account that
+  # isn't linked yet, and that /premium <password> enables automatic login.
+  suggest-premium: true
+  # If the Mojang API can't be reached, refuse joins of unregistered names instead of letting
+  # them in as cracked (which could let someone register a premium name during an outage).
+  deny-on-mojang-error: false
+  mojang-cache-minutes: 10

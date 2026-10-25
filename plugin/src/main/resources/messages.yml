@@ -1,0 +1,83 @@
+# LogonMC messages, in MiniMessage format: https://docs.advntr.dev/minimessage/format.html
+prefix: "<dark_gray>[<gradient:#5ee7df:#b490ca>LogonMC</gradient>]</dark_gray> "
+
+kick:
+  invalid-name: "<red>Your username contains invalid characters or has an invalid length."
+  wrong-case: "<red>This name is registered as <white><correct></white>.\n<gray>Join with exactly that capitalization."
+  mojang-unavailable: "<red>We can't verify your account right now. Try again in a minute."
+  no-auth-server: "<red>The login server is unavailable. Try again later."
+  timeout: "<red>You took too long to log in."
+  too-many-attempts: "<red>Too many wrong passwords."
+  database-error: "<red>Login failed due to an internal error. Try again later."
+  premium-rejoin: "<green>Premium mode enabled.\n<gray>Rejoin with your premium client; you'll be logged in automatically."
+  cracked-rejoin: "<yellow>Premium mode disabled.\n<gray>Rejoin and log in with your password."
+  unregistered: "<yellow>Your account has been deleted."
+  name-taken: "<red>This name is registered by another account on this server.\n<gray>Join with a different name."
+  premium-already-linked: "<red>Your premium account is already linked to another account on this server.\n<gray>Join with that account's name."
+
+prompt:
+  login: "<prefix><gray>Log in with <white>/login <password></white>"
+  register: "<prefix><gray>Register with <white>/register <password> <password></white>"
+  login-title: "<gradient:#5ee7df:#b490ca>Welcome back"
+  register-title: "<gradient:#5ee7df:#b490ca>Welcome"
+  subtitle-login: "<gray>/login <password>"
+  subtitle-register: "<gray>/register <password> <password>"
+
+auth:
+  logged-in: "<prefix><green>Logged in."
+  registered: "<prefix><green>Registered and logged in."
+  premium: "<prefix><green>Logged in automatically with your premium account."
+  session: "<prefix><green>Session resumed."
+  forced: "<prefix><green>You have been logged in."
+  wrong-password: "<prefix><red>Wrong password. <gray>(<remaining> attempts left)"
+  already-authenticated: "<prefix><red>You are already logged in."
+  not-registered: "<prefix><red>You don't have an account. Use <white>/register <password> <password>"
+  already-registered: "<prefix><red>You already have an account. Use <white>/login <password>"
+  passwords-dont-match: "<prefix><red>The passwords don't match."
+  password-too-short: "<prefix><red>The password must be at least <min> characters."
+  password-too-long: "<prefix><red>The password must be at most <max> characters."
+  password-is-name: "<prefix><red>Your password can't be your username."
+  not-authenticated: "<prefix><red>Log in first."
+  password-changed: "<prefix><green>Password changed."
+  logged-out: "<prefix><yellow>Logged out."
+  blocked-command: "<prefix><red>Log in before using commands."
+  error: "<prefix><red>Something went wrong. Try again."
+  connect-failed: "<prefix><red>No server is available right now. Try again with <white>/login</white> in a moment."
+
+premium:
+  not-premium-name: "<prefix><red>No premium account is named exactly <white><name></white>."
+  already-premium: "<prefix><red>Your account is already premium."
+  already-linked: "<prefix><red>The premium account <white><name></white> is already linked to another account here."
+  name-taken: "<prefix><red>Another account has registered <white><name></white>, so this account can't become cracked under that name."
+  not-premium: "<prefix><red>Your account is not premium."
+  need-password: "<prefix><red>Set a password with <white>/changepassword <new password></white> before going cracked."
+  confirm: "<prefix><yellow>This will make your account premium-only. Run <white>/premium <password></white> to confirm."
+  checking: "<prefix><gray>Checking with Mojang..."
+  suggest: "<prefix><gold>Your name belongs to a premium Minecraft account.</gold> <gray>If it's yours, <click:suggest_command:'/premium '><hover:show_text:'<gray>Click to type the command'><white><u>/premium <password></u></white></hover></click> logs you in automatically from now on."
+
+admin:
+  reloaded: "<prefix><green>Configuration reloaded."
+  user-not-found: "<prefix><red>No account named <white><name></white>."
+  other-accounts: "<prefix><yellow>Several accounts were last seen as <white><name></white>. Using <white><uuid></white>; the others are <white><accounts></white>. Pass a UUID instead of the name to pick one."
+  player-not-online: "<prefix><red><white><name></white> is not online."
+  info: |-
+    <prefix><white><name></white>
+    <gray>Profile UUID: <white><uuid></white>
+    <gray>Premium UUID: <white><premium></white>
+    <gray>Password: <white><password></white>
+    <gray>Joined: <white><joined></white>  Last seen: <white><last_seen></white>
+    <gray>Last server: <white><last_server></white>  Last IP: <white><last_ip></white>
+  forced-login: "<prefix><green>Logged in <white><name></white>."
+  unregistered: "<prefix><green>Deleted the account of <white><name></white>."
+  password-set: "<prefix><green>Password of <white><name></white> changed."
+  premium-set: "<prefix><green><white><name></white> will authenticate with Mojang from their next join."
+  cracked-set: "<prefix><green><white><name></white> is now a cracked account."
+  usage: |-
+    <prefix><white>LogonMC admin</white>
+    <gray>/logonmc reload
+    <gray>/logonmc info <name|uuid>
+    <gray>/logonmc forcelogin <player>
+    <gray>/logonmc unregister <name|uuid>
+    <gray>/logonmc setpassword <name|uuid> <password>
+    <gray>/logonmc premium <name|uuid>
+    <gray>/logonmc cracked <name|uuid>
