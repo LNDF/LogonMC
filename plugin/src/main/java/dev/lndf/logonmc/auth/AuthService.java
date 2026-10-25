@@ -3,6 +3,7 @@ package dev.lndf.logonmc.auth;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.scheduler.ScheduledTask;
 import dev.lndf.logonmc.api.AuthReason;
 import dev.lndf.logonmc.api.event.PlayerAuthenticatedEvent;
 import dev.lndf.logonmc.api.event.PlayerLogoutEvent;
@@ -29,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import org.jspecify.annotations.Nullable;
@@ -212,14 +214,34 @@ public final class AuthService {
                 msg.get(registered ? "prompt.login-title" : "prompt.register-title"),
                 msg.get(registered ? "prompt.subtitle-login" : "prompt.subtitle-register"),
                 Title.Times.times(Duration.ofMillis(250), cfg.auth().loginTimeout(), Duration.ofMillis(250))));
-        state.scheduleTasks(
-                proxy.getScheduler().buildTask(plugin, remind).repeat(cfg.auth().reminderInterval()).schedule(),
-                proxy.getScheduler().buildTask(plugin, () -> {
-                    if (!state.isAuthenticated()) {
-                        player.disconnect(messages().get("kick.timeout"));
-                    }
-                }).delay(cfg.auth().loginTimeout()).schedule()
-        );
+        ScheduledTask reminder = proxy.getScheduler().buildTask(plugin, remind).repeat(cfg.auth().reminderInterval()).schedule();
+        ScheduledTask timeout = proxy.getScheduler().buildTask(plugin, () -> {
+            if (!state.isAuthenticated()) {
+                player.disconnect(messages().get("kick.timeout"));
+            }
+        }).delay(cfg.auth().loginTimeout()).schedule();
+
+        PluginConfig.BossBarSettings barSettings = cfg.auth().bossBar();
+        if (!barSettings.enabled()) {
+            state.startPrompt(null, reminder, timeout);
+            return;
+        }
+        String barKey = registered ? "prompt.boss-bar-login" : "prompt.boss-bar-register";
+        long timeoutMillis = Math.max(1, cfg.auth().loginTimeout().toMillis());
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        BossBar bar = BossBar.bossBar(bossBarName(barKey, timeoutMillis), 1f, barSettings.color(), barSettings.overlay());
+        player.showBossBar(bar);
+        // The client animates between updates, so once a second still drains smoothly.
+        ScheduledTask drain = proxy.getScheduler().buildTask(plugin, () -> {
+            long left = Math.max(0, deadline - System.currentTimeMillis());
+            bar.progress((float) left / timeoutMillis);
+            bar.name(bossBarName(barKey, left));
+        }).delay(1, TimeUnit.SECONDS).repeat(1, TimeUnit.SECONDS).schedule();
+        state.startPrompt(() -> player.hideBossBar(bar), reminder, timeout, drain);
+    }
+
+    private Component bossBarName(String key, long millisLeft) {
+        return messages().get(key, arg("seconds", (millisLeft + 999) / 1000));
     }
 
     // ---- Password commands ----

@@ -22,6 +22,8 @@ prompt:
   register-title: "<gradient:#5ee7df:#b490ca>Welcome"
   subtitle-login: "<gray>/login <password>"
   subtitle-register: "<gray>/register <password> <password>"
+  boss-bar-login: "<yellow>Log in within <white><seconds></white> seconds"
+  boss-bar-register: "<yellow>Register within <white><seconds></white> seconds"
 
 auth:
   logged-in: "<prefix><green>Logged in."

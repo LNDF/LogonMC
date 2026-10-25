@@ -32,6 +32,14 @@ auth:
   # Commands unauthenticated players may run. Everything else (proxy and backend) is blocked.
   allowed-commands: [login, l, log, register, reg]
   reminder-interval-seconds: 10
+  # A boss bar that drains over login-timeout-seconds while a player hasn't logged in yet.
+  # Text: prompt.boss-bar-login / prompt.boss-bar-register in messages.yml.
+  boss-bar:
+    enabled: true
+    # PINK, BLUE, RED, GREEN, YELLOW, PURPLE or WHITE
+    color: YELLOW
+    # PROGRESS (solid), NOTCHED_6, NOTCHED_10, NOTCHED_12 or NOTCHED_20
+    overlay: PROGRESS
   # Refuse passwords listed in the .txt files of plugins/logonmc/unsafe_lists/, one password per
   # line (e.g. leaked-password lists). On first start the folder gets a short Minecraft-flavored
   # list and the 10,000 most common passwords from SecLists.

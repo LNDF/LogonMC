@@ -3,6 +3,7 @@ package dev.lndf.logonmc.auth;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import dev.lndf.logonmc.api.AuthReason;
 import dev.lndf.logonmc.db.StoredUser;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.Nullable;
@@ -17,8 +18,8 @@ public final class PlayerAuthState {
     private volatile @Nullable String lastServer;
     private final AtomicInteger failedAttempts = new AtomicInteger();
     private final AtomicBoolean premiumSuggested = new AtomicBoolean();
-    private volatile @Nullable ScheduledTask reminderTask;
-    private volatile @Nullable ScheduledTask timeoutTask;
+    private List<ScheduledTask> promptTasks = List.of();
+    private @Nullable Runnable promptCleanup;
 
     PlayerAuthState(@Nullable StoredUser user) {
         this.user = user;
@@ -67,22 +68,26 @@ public final class PlayerAuthState {
         return premiumSuggested.compareAndSet(false, true);
     }
 
-    void scheduleTasks(ScheduledTask reminder, ScheduledTask timeout) {
+    /**
+     * Replaces the running login prompt: its scheduled tasks, and an action that removes what it
+     * shows (the boss bar).
+     */
+    synchronized void startPrompt(@Nullable Runnable cleanup, ScheduledTask... tasks) {
         cancelTasks();
-        this.reminderTask = reminder;
-        this.timeoutTask = timeout;
+        this.promptTasks = List.of(tasks);
+        this.promptCleanup = cleanup;
     }
 
-    void cancelTasks() {
-        ScheduledTask reminder = reminderTask;
-        ScheduledTask timeout = timeoutTask;
-        if (reminder != null) {
-            reminder.cancel();
+    /**
+     * Stops the login prompt, if one is running.
+     */
+    synchronized void cancelTasks() {
+        promptTasks.forEach(ScheduledTask::cancel);
+        promptTasks = List.of();
+        Runnable cleanup = promptCleanup;
+        promptCleanup = null;
+        if (cleanup != null) {
+            cleanup.run();
         }
-        if (timeout != null) {
-            timeout.cancel();
-        }
-        reminderTask = null;
-        timeoutTask = null;
     }
 }

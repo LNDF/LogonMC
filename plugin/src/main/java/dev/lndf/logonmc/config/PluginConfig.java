@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import net.kyori.adventure.bossbar.BossBar;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.serialize.SerializationException;
 
@@ -32,7 +33,10 @@ public record PluginConfig(
 
     public record Auth(Duration loginTimeout, int maxAttempts, int passwordMinLength, int passwordMaxLength,
                        HashAlgorithm hashAlgorithm, Set<String> allowedCommands, Duration reminderInterval,
-                       UnsafePasswords unsafePasswords) {
+                       UnsafePasswords unsafePasswords, BossBarSettings bossBar) {
+    }
+
+    public record BossBarSettings(boolean enabled, BossBar.Color color, BossBar.Overlay overlay) {
     }
 
     public record UnsafePasswords(boolean enabled, boolean caseSensitive) {
@@ -85,6 +89,11 @@ public record PluginConfig(
                         new UnsafePasswords(
                                 auth.node("unsafe-passwords", "enabled").getBoolean(true),
                                 auth.node("unsafe-passwords", "case-sensitive").getBoolean(false)
+                        ),
+                        new BossBarSettings(
+                                auth.node("boss-bar", "enabled").getBoolean(true),
+                                enumValue(BossBar.Color.class, auth.node("boss-bar", "color").getString("YELLOW")),
+                                enumValue(BossBar.Overlay.class, auth.node("boss-bar", "overlay").getString("PROGRESS"))
                         )
                 ),
                 new Session(

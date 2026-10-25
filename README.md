@@ -75,7 +75,7 @@ LogonMC never renames an account to settle a conflict. The joining player is ref
 
 Admin commands that take an account accept a name or a UUID (profile or Mojang UUID, with or without dashes). Several accounts can share a name: a linked player keeps the name they last joined with until they rejoin, even after someone else has registered it. When a name matches more than one account, the cracked owner is picked, and the reply lists the other accounts' UUIDs so you can pick one of those instead.
 
-Unauthenticated players can only run the commands in `auth.allowed-commands`, and can't leave the auth server.
+Unauthenticated players can only run the commands in `auth.allowed-commands`, and can't leave the auth server. While they haven't logged in, a boss bar counts down the time left before they're kicked (`auth.boss-bar`; color and style configurable, or turn it off).
 
 ### Permissions
 
