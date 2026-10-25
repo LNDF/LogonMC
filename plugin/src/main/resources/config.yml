@@ -32,6 +32,14 @@ auth:
   # Commands unauthenticated players may run. Everything else (proxy and backend) is blocked.
   allowed-commands: [login, l, log, register, reg]
   reminder-interval-seconds: 10
+  # Refuse passwords listed in the .txt files of plugins/logonmc/unsafe_lists/, one password per
+  # line (e.g. leaked-password lists). On first start the folder gets a short Minecraft-flavored
+  # list and the 10,000 most common passwords from SecLists.
+  # Applies to /register and /changepassword. Lists are reloaded with /logonmc reload.
+  unsafe-passwords:
+    enabled: true
+    # false also refuses other capitalizations of a listed password ("PassWord1" for "password1").
+    case-sensitive: false
 
 session:
   enabled: true

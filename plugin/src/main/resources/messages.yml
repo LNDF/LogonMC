@@ -37,6 +37,7 @@ auth:
   password-too-short: "<prefix><red>The password must be at least <min> characters."
   password-too-long: "<prefix><red>The password must be at most <max> characters."
   password-is-name: "<prefix><red>Your password can't be your username."
+  password-unsafe: "<prefix><red>That password is too common and easy to guess. Choose another one."
   not-authenticated: "<prefix><red>Log in first."
   password-changed: "<prefix><green>Password changed."
   logged-out: "<prefix><yellow>Logged out."

@@ -31,7 +31,11 @@ public record PluginConfig(
     }
 
     public record Auth(Duration loginTimeout, int maxAttempts, int passwordMinLength, int passwordMaxLength,
-                       HashAlgorithm hashAlgorithm, Set<String> allowedCommands, Duration reminderInterval) {
+                       HashAlgorithm hashAlgorithm, Set<String> allowedCommands, Duration reminderInterval,
+                       UnsafePasswords unsafePasswords) {
+    }
+
+    public record UnsafePasswords(boolean enabled, boolean caseSensitive) {
     }
 
     public record Session(boolean enabled, Duration duration) {
@@ -77,7 +81,11 @@ public record PluginConfig(
                         enumValue(HashAlgorithm.class, auth.node("hash-algorithm").getString("ARGON2ID")),
                         auth.node("allowed-commands").getList(String.class, List.of("login", "l", "register", "reg"))
                                 .stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet()),
-                        Duration.ofSeconds(Math.max(1, auth.node("reminder-interval-seconds").getLong(10)))
+                        Duration.ofSeconds(Math.max(1, auth.node("reminder-interval-seconds").getLong(10))),
+                        new UnsafePasswords(
+                                auth.node("unsafe-passwords", "enabled").getBoolean(true),
+                                auth.node("unsafe-passwords", "case-sensitive").getBoolean(false)
+                        )
                 ),
                 new Session(
                         session.node("enabled").getBoolean(true),

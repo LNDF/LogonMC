@@ -562,6 +562,9 @@ public final class AuthService {
         if (password.toLowerCase(Locale.ROOT).equals(player.getUsername().toLowerCase(Locale.ROOT))) {
             return messages().get("auth.password-is-name");
         }
+        if (plugin.isUnsafePassword(password)) {
+            return messages().get("auth.password-unsafe");
+        }
         return null;
     }
 

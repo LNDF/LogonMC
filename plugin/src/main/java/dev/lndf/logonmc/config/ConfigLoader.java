@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
@@ -27,6 +28,27 @@ public final class ConfigLoader {
 
     public Messages loadMessages() throws IOException {
         return new Messages(load("messages.yml"), bundled("messages.yml"));
+    }
+
+    /** Lists copied into a new unsafe_lists directory. SECLISTS-LICENSE isn't a .txt, so it isn't read as a list. */
+    private static final List<String> BUNDLED_UNSAFE_LISTS =
+            List.of("common.txt", "seclists-10k-most-common.txt", "SECLISTS-LICENSE");
+
+    /**
+     * The directory of unsafe-password lists. When it doesn't exist yet it is created with the
+     * bundled lists; after that its contents are the admin's.
+     */
+    public Path unsafeListsDirectory() throws IOException {
+        Path directory = dataDirectory.resolve("unsafe_lists");
+        if (Files.notExists(directory)) {
+            Files.createDirectories(directory);
+            for (String name : BUNDLED_UNSAFE_LISTS) {
+                try (InputStream in = resource("unsafe_lists/" + name)) {
+                    Files.copy(in, directory.resolve(name));
+                }
+            }
+        }
+        return directory;
     }
 
     private ConfigurationNode load(String name) throws IOException {

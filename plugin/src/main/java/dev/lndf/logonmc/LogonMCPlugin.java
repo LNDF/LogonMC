@@ -17,6 +17,7 @@ import dev.lndf.logonmc.config.ConfigLoader;
 import dev.lndf.logonmc.config.Messages;
 import dev.lndf.logonmc.config.PluginConfig;
 import dev.lndf.logonmc.crypto.Hashers;
+import dev.lndf.logonmc.crypto.UnsafePasswords;
 import dev.lndf.logonmc.db.Database;
 import dev.lndf.logonmc.db.SchemaMigrator;
 import dev.lndf.logonmc.db.SessionRepository;
@@ -24,6 +25,7 @@ import dev.lndf.logonmc.db.UserRepository;
 import dev.lndf.logonmc.listener.ConnectionListener;
 import dev.lndf.logonmc.listener.GuardListener;
 import dev.lndf.logonmc.mojang.MojangClient;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -50,6 +52,7 @@ public final class LogonMCPlugin {
     private volatile PluginConfig config;
     private volatile Messages messages;
     private volatile Hashers hashers;
+    private final UnsafePasswords unsafePasswords = new UnsafePasswords();
     private Database database;
 
     @Inject
@@ -92,6 +95,7 @@ public final class LogonMCPlugin {
                 new AdminCommand(this, auth, resolver, users, sessions, mojang));
         auth.purgeSessionsLater();
 
+        loadUnsafePasswords();
         LogonMCProvider.register(new LogonMCImpl(this, auth, users, sessions));
         logger.info("LogonMC {} enabled ({} database, auth server '{}')",
                 BuildConstants.VERSION, config.database().type(), config.servers().auth());
@@ -120,11 +124,32 @@ public final class LogonMCPlugin {
     }
 
     /**
-     * Reloads config.yml and messages.yml. Database settings only apply after a restart.
+     * Reads the unsafe-password lists in the background; the previous lists stay in use meanwhile.
+     */
+    private void loadUnsafePasswords() {
+        PluginConfig.UnsafePasswords settings = config.auth().unsafePasswords();
+        if (!settings.enabled()) {
+            return;
+        }
+        async(() -> {
+            try {
+                long start = System.nanoTime();
+                int count = unsafePasswords.load(configLoader.unsafeListsDirectory(), settings.caseSensitive());
+                logger.info("Loaded {} unsafe passwords in {} ms", count, (System.nanoTime() - start) / 1_000_000);
+            } catch (IOException e) {
+                logger.error("Could not read the unsafe password lists; keeping the previous ones", e);
+            }
+        });
+    }
+
+    /**
+     * Reloads config.yml, messages.yml and the unsafe-password lists. Database settings only apply
+     * after a restart.
      */
     public boolean reload() {
         try {
             loadConfiguration();
+            loadUnsafePasswords();
             return true;
         } catch (Exception e) {
             logger.error("Could not reload the configuration; keeping the previous one", e);
@@ -167,5 +192,13 @@ public final class LogonMCPlugin {
 
     public Hashers hashers() {
         return hashers;
+    }
+
+    /**
+     * Whether players may not choose this password: it appears in the unsafe lists and the check
+     * is enabled.
+     */
+    public boolean isUnsafePassword(String password) {
+        return config.auth().unsafePasswords().enabled() && unsafePasswords.contains(password);
     }
 }
