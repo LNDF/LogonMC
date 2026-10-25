@@ -133,7 +133,7 @@ public final class AuthService {
      * First ServerPostConnectEvent: the client can now display chat and titles, so greet
      * auto-authenticated players or start the login prompt.
      */
-    public void firstServerJoined(Player player) {
+    private void firstServerJoined(Player player) {
         PlayerAuthState state = state(player);
         if (state == null) {
             return;
@@ -142,6 +142,21 @@ public final class AuthService {
             player.sendMessage(messages().get(state.reason() == AuthReason.PREMIUM ? "auth.premium" : "auth.session"));
             plugin.async(() -> suggestPremium(player, state));
         } else {
+            startPrompt(player, state);
+        }
+    }
+
+    /**
+     * ServerPostConnectEvent: the first server starts the join flow; arriving back on the auth
+     * server unauthenticated (after /logout) starts the login prompt.
+     */
+    public void serverPostConnect(Player player, boolean firstServer) {
+        if (firstServer) {
+            firstServerJoined(player);
+            return;
+        }
+        PlayerAuthState state = state(player);
+        if (state != null && !state.isAuthenticated() && isOnAuthServer(player)) {
             startPrompt(player, state);
         }
     }
@@ -326,8 +341,9 @@ public final class AuthService {
             if (user != null) {
                 sessions.delete(user.uuid());
             }
-            deauthenticate(player, state);
+            // Before the switch to the auth server, which could swallow it.
             player.sendMessage(messages().get("auth.logged-out"));
+            deauthenticate(player, state);
         });
     }
 
@@ -496,8 +512,22 @@ public final class AuthService {
             player.disconnect(messages().get("kick.no-auth-server"));
             return;
         }
-        player.createConnectionRequest(auth.get()).fireAndForget();
-        startPrompt(player, state);
+        if (isOnAuthServer(player)) {
+            startPrompt(player, state);
+            return;
+        }
+        // The prompt starts in serverPostConnect once the player is there: a title sent during the
+        // switch is cleared by the client. A player who can't reach the auth server isn't left
+        // unauthenticated on a backend server.
+        player.createConnectionRequest(auth.get()).connect().whenComplete((result, error) -> {
+            if (player.isActive() && (error != null || result == null || !result.isSuccessful())) {
+                player.disconnect(messages().get("kick.no-auth-server"));
+            }
+        });
+    }
+
+    private boolean isOnAuthServer(Player player) {
+        return player.getCurrentServer().map(connection -> isAuthServer(connection.getServer())).orElse(false);
     }
 
     /**

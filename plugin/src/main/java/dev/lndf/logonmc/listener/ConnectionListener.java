@@ -118,9 +118,7 @@ public final class ConnectionListener {
 
     @Subscribe
     public void onServerPostConnect(ServerPostConnectEvent event) {
-        if (event.getPreviousServer() == null) {
-            auth.firstServerJoined(event.getPlayer());
-        }
+        auth.serverPostConnect(event.getPlayer(), event.getPreviousServer() == null);
     }
 
     @Subscribe
