@@ -57,6 +57,7 @@ premium:
 
 admin:
   reloaded: "<prefix><green>Configuration reloaded."
+  no-permission: "<prefix><red>You don't have permission to use that subcommand."
   user-not-found: "<prefix><red>No account named <white><name></white>."
   other-accounts: "<prefix><yellow>Several accounts were last seen as <white><name></white>. Using <white><uuid></white>; the others are <white><accounts></white>. Pass a UUID instead of the name to pick one."
   player-not-online: "<prefix><red><white><name></white> is not online."

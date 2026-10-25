@@ -30,7 +30,7 @@ Gradle downloads a JDK 25 automatically if one isn't installed.
    - `force-key-authentication = false`, so cracked clients can join.
    - `player-info-forwarding-mode = "modern"`, with the forwarding secret set on every backend.
 4. Backends: `online-mode=false`, with Velocity forwarding enabled. Leave the auth server out of the `try` list so nobody lands there after logging in.
-5. Grant `logonmc.admin` to staff.
+5. Grant `logonmc.admin` to staff, or only the subcommands they need (see [Permissions](#permissions)).
 
 If LogonMC can't start (for example, a bad database config), it refuses every login instead of letting players in unauthenticated.
 
@@ -71,11 +71,28 @@ LogonMC never renames an account to settle a conflict. The joining player is ref
 | `/premium <password>` | Link your account to your Mojang account for automatic login |
 | `/cracked` | Unlink and go back to password login |
 | `/unregister <password>` | Delete your account |
-| `/logonmc reload\|info\|forcelogin\|unregister\|setpassword\|premium\|cracked` | Admin (`logonmc.admin`) |
+| `/logonmc reload\|info\|forcelogin\|unregister\|setpassword\|premium\|cracked` | Admin (see [Permissions](#permissions)) |
 
 Admin commands that take an account accept a name or a UUID (profile or Mojang UUID, with or without dashes). Several accounts can share a name: a linked player keeps the name they last joined with until they rejoin, even after someone else has registered it. When a name matches more than one account, the cracked owner is picked, and the reply lists the other accounts' UUIDs so you can pick one of those instead.
 
 Unauthenticated players can only run the commands in `auth.allowed-commands`, and can't leave the auth server.
+
+### Permissions
+
+Player commands need no permission. Each admin subcommand has its own:
+
+| Permission | Allows |
+|---|---|
+| `logonmc.admin` | Every subcommand below |
+| `logonmc.admin.reload` | `/logonmc reload` |
+| `logonmc.admin.info` | `/logonmc info <name\|uuid>` |
+| `logonmc.admin.forcelogin` | `/logonmc forcelogin <player>` |
+| `logonmc.admin.unregister` | `/logonmc unregister <name\|uuid>` |
+| `logonmc.admin.setpassword` | `/logonmc setpassword <name\|uuid> <password>` |
+| `logonmc.admin.premium` | `/logonmc premium <name\|uuid>` |
+| `logonmc.admin.cracked` | `/logonmc cracked <name\|uuid>` |
+
+`/logonmc` is visible to anyone with at least one of these, and tab completion only offers the subcommands they're allowed to use. Like every command, they only work after the staff member has logged in.
 
 ## API
 

@@ -27,11 +27,13 @@ import org.jspecify.annotations.Nullable;
 import static dev.lndf.logonmc.config.Messages.arg;
 
 /**
- * /logonmc: administration, permission {@code logonmc.admin}.
+ * /logonmc: administration. Each subcommand needs {@code logonmc.admin.<subcommand>};
+ * {@code logonmc.admin} grants all of them.
  */
 public final class AdminCommand implements SimpleCommand {
 
     public static final String PERMISSION = "logonmc.admin";
+    private static final String PERMISSION_PREFIX = PERMISSION + ".";
     private static final List<String> SUBCOMMANDS =
             List.of("reload", "info", "forcelogin", "unregister", "setpassword", "premium", "cracked");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
@@ -53,9 +55,14 @@ public final class AdminCommand implements SimpleCommand {
         this.mojang = mojang;
     }
 
+    /** Shown to anyone allowed at least one subcommand. */
     @Override
     public boolean hasPermission(Invocation invocation) {
-        return invocation.source().hasPermission(PERMISSION);
+        return SUBCOMMANDS.stream().anyMatch(sub -> allowed(invocation.source(), sub));
+    }
+
+    private static boolean allowed(CommandSource source, String sub) {
+        return source.hasPermission(PERMISSION) || source.hasPermission(PERMISSION_PREFIX + sub);
     }
 
     @Override
@@ -63,9 +70,12 @@ public final class AdminCommand implements SimpleCommand {
         String[] args = invocation.arguments();
         if (args.length <= 1) {
             String prefix = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
-            return SUBCOMMANDS.stream().filter(s -> s.startsWith(prefix)).toList();
+            return SUBCOMMANDS.stream()
+                    .filter(s -> s.startsWith(prefix) && allowed(invocation.source(), s))
+                    .toList();
         }
-        if (args.length == 2 && !args[0].equalsIgnoreCase("reload")) {
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2 && !sub.equals("reload") && SUBCOMMANDS.contains(sub) && allowed(invocation.source(), sub)) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return plugin.proxy().getAllPlayers().stream().map(Player::getUsername)
                     .filter(n -> n.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();
@@ -85,6 +95,10 @@ public final class AdminCommand implements SimpleCommand {
             case "setpassword" -> 3;
             default -> -1;
         };
+        if (expected != -1 && !allowed(source, sub)) {
+            source.sendMessage(msg.get("admin.no-permission"));
+            return;
+        }
         if (args.length != expected) {
             source.sendMessage(msg.get("admin.usage"));
             return;
