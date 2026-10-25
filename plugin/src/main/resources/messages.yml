@@ -9,8 +9,8 @@ kick:
   timeout: "<red>You took too long to log in."
   too-many-attempts: "<red>Too many wrong passwords."
   database-error: "<red>Login failed due to an internal error. Try again later."
-  premium-rejoin: "<green>Premium mode enabled.\n<gray>Rejoin with your premium client; you'll be logged in automatically."
-  cracked-rejoin: "<yellow>Premium mode disabled.\n<gray>Rejoin and log in with your password."
+  premium-rejoin: "<green>Almost done.\n<gray>Rejoin with your premium client to finish linking your account."
+  cracked-rejoin: "<yellow>Your account is no longer linked to Mojang.\n<gray>Rejoin and log in with your password."
   unregistered: "<yellow>Your account has been deleted."
   name-taken: "<red>This name is registered by another account on this server.\n<gray>Join with a different name."
   premium-already-linked: "<red>Your premium account is already linked to another account on this server.\n<gray>Join with that account's name."
@@ -47,13 +47,11 @@ auth:
 
 premium:
   not-premium-name: "<prefix><red>No premium account is named exactly <white><name></white>."
-  already-premium: "<prefix><red>Your account is already premium."
+  already-premium: "<prefix><red>Your account is already linked."
   already-linked: "<prefix><red>The premium account <white><name></white> is already linked to another account here."
   name-taken: "<prefix><red>Another account has registered <white><name></white>, so this account can't become cracked under that name."
-  not-premium: "<prefix><red>Your account is not premium."
-  need-password: "<prefix><red>Set a password with <white>/changepassword <new password></white> before going cracked."
-  confirm: "<prefix><yellow>This will make your account premium-only. Run <white>/premium <password></white> to confirm."
-  checking: "<prefix><gray>Checking with Mojang..."
+  not-premium: "<prefix><red>Your account isn't linked."
+  confirm: "<prefix><gray>Link your Mojang account for automatic login with <white>/premium <password></white>"
   suggest: "<prefix><gold>Your name belongs to a premium Minecraft account.</gold> <gray>If it's yours, <click:suggest_command:'/premium '><hover:show_text:'<gray>Click to type the command'><white><u>/premium <password></u></white></hover></click> logs you in automatically from now on."
 
 admin:
@@ -72,8 +70,10 @@ admin:
   forced-login: "<prefix><green>Logged in <white><name></white>."
   unregistered: "<prefix><green>Deleted the account of <white><name></white>."
   password-set: "<prefix><green>Password of <white><name></white> changed."
-  premium-set: "<prefix><green><white><name></white> will authenticate with Mojang from their next join."
-  cracked-set: "<prefix><green><white><name></white> is now a cracked account."
+  premium-set: "<prefix><green><white><name></white> is now linked to their Mojang account."
+  cracked-set: "<prefix><green><white><name></white> is no longer linked and logs in with a password."
+  already-linked: "<prefix><red><white><name></white> is already linked."
+  not-linked: "<prefix><red><white><name></white> isn't linked."
   usage: |-
     <prefix><white>LogonMC admin</white>
     <gray>/logonmc reload

@@ -362,7 +362,6 @@ public final class AuthService {
             player.sendMessage(messages().get("premium.already-premium"));
             return;
         }
-        player.sendMessage(messages().get("premium.checking"));
         plugin.async(() -> {
             HashedPassword hash = user.password();
             if (hash == null || !plugin.hashers().verify(password, hash)) {
@@ -399,10 +398,6 @@ public final class AuthService {
         }
         if (!user.isLinked()) {
             player.sendMessage(messages().get("premium.not-premium"));
-            return;
-        }
-        if (!user.hasPassword()) {
-            player.sendMessage(messages().get("premium.need-password"));
             return;
         }
         plugin.async(() -> {

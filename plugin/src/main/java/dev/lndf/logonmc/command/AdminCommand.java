@@ -167,7 +167,7 @@ public final class AdminCommand implements SimpleCommand {
      */
     private void premium(CommandSource source, StoredUser user) {
         if (user.isLinked()) {
-            source.sendMessage(plugin.messages().get("premium.already-premium"));
+            source.sendMessage(plugin.messages().get("admin.already-linked", arg("name", user.lastNickname())));
             return;
         }
         Optional<MojangProfile> profile;
@@ -197,7 +197,7 @@ public final class AdminCommand implements SimpleCommand {
 
     private void cracked(CommandSource source, StoredUser user) {
         if (!user.isLinked()) {
-            source.sendMessage(plugin.messages().get("premium.not-premium"));
+            source.sendMessage(plugin.messages().get("admin.not-linked", arg("name", user.lastNickname())));
             return;
         }
         Optional<StoredUser> owner = users.findCrackedByName(user.lastNickname());
