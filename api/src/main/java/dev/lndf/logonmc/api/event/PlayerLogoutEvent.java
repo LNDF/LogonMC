@@ -4,7 +4,8 @@ import com.velocitypowered.api.proxy.Player;
 
 /**
  * Fired when an authenticated player loses authentication while still online, through /logout
- * or {@link dev.lndf.logonmc.api.LogonMC#forceLogout}.
+ * or {@link dev.lndf.logonmc.api.LogonMC#forceLogout}. LogonMC then sends the player back to the
+ * auth server, or disconnects them if no auth server is available or the switch to it fails.
  */
 public final class PlayerLogoutEvent {
 

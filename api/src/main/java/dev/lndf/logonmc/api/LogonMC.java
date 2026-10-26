@@ -93,6 +93,8 @@ public interface LogonMC {
 
     /**
      * Revokes the player's authentication and session, sending them back to the auth server.
+     * The player is disconnected if no auth server is available or the switch to it fails.
+     * Does nothing if the player is not authenticated.
      *
      * @param player an online player
      * @return completes once the player is logged out
@@ -101,6 +103,9 @@ public interface LogonMC {
 
     /**
      * Checks a password against the stored hash.
+     *
+     * <p>Not rate-limited: wrong passwords don't count towards LogonMC's lockouts or delays. If you
+     * pass it passwords typed by players, limit the attempts yourself.
      *
      * @param uuid profile UUID of the account
      * @param password password to check
