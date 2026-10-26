@@ -8,9 +8,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.Nullable;
 
-/**
- * Authentication state of one online player.
- */
 public final class PlayerAuthState {
 
     private volatile @Nullable StoredUser user;
@@ -105,9 +102,6 @@ public final class PlayerAuthState {
         cancelTasks();
     }
 
-    /**
-     * Stops the login prompt, if one is running.
-     */
     synchronized void cancelTasks() {
         promptTasks.forEach(ScheduledTask::cancel);
         promptTasks = List.of();

@@ -100,8 +100,6 @@ public final class AuthService {
         return state != null && state.isAuthenticated();
     }
 
-    // ---- Join lifecycle ----
-
     public void rememberProfile(UUID profileUuid, @Nullable StoredUser user) {
         pendingProfiles.put(profileUuid, Optional.ofNullable(user));
     }
@@ -281,8 +279,6 @@ public final class AuthService {
     private Component bossBarName(String key, long millisLeft) {
         return messages().get(key, arg("seconds", (millisLeft + 999) / 1000));
     }
-
-    // ---- Password commands ----
 
     public void login(Player player, String password) {
         PlayerAuthState state = state(player);
@@ -503,8 +499,6 @@ public final class AuthService {
             return false;
         });
     }
-
-    // ---- Shared with the API and admin command ----
 
     /**
      * Authenticates without a password. Blocks on events; call from the executor.

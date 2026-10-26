@@ -175,9 +175,6 @@ public final class LogonMCPlugin {
         }
     }
 
-    /**
-     * Runs blocking work on the plugin executor, logging failures.
-     */
     public void async(Runnable task) {
         executor.execute(() -> {
             try {
@@ -212,10 +209,6 @@ public final class LogonMCPlugin {
         return hashers;
     }
 
-    /**
-     * Whether players may not choose this password: it appears in the unsafe lists and the check
-     * is enabled.
-     */
     public boolean isUnsafePassword(String password) {
         return config.auth().unsafePasswords().enabled() && unsafePasswords.contains(password);
     }

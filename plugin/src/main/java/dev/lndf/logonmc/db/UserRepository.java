@@ -38,9 +38,6 @@ public final class UserRepository {
         return findOne("uuid = ?", uuid.toString());
     }
 
-    /**
-     * The cracked account that owns this name.
-     */
     public Optional<StoredUser> findCrackedByName(String name) {
         return findOne("reserved_name = ?", lower(name));
     }

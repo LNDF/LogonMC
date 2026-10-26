@@ -30,7 +30,6 @@ public final class ConfigLoader {
         return new Messages(load("messages.yml"), bundled("messages.yml"));
     }
 
-    /** Lists copied into a new unsafe_lists directory. */
     private static final List<String> BUNDLED_UNSAFE_LISTS = List.of("common.txt", "seclists-10k-most-common.txt");
 
     /**

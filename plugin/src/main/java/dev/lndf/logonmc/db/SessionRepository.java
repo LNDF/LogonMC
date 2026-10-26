@@ -32,9 +32,6 @@ public final class SessionRepository {
         });
     }
 
-    /**
-     * Whether a session for this account and IP exists and has not expired at {@code now}.
-     */
     public boolean isValid(UUID uuid, String ip, Instant now) {
         return database.query(connection -> {
             try (PreparedStatement ps = connection.prepareStatement(

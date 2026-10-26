@@ -105,8 +105,6 @@ class LoginResolverTest {
         configure(root -> set(root, false, "premium", "protect-premium-names"));
     }
 
-    // ---- Name validation ----
-
     @Test
     void rejectsInvalidNames() {
         assertEquals(Mode.DENY, resolver.decide("ab", CLIENT).mode());
@@ -143,8 +141,6 @@ class LoginResolverTest {
         cracked("Steve");
         assertEquals(Mode.OFFLINE, resolver.decide("steve", CLIENT).mode());
     }
-
-    // ---- Pre-login decision ----
 
     @Test
     void unknownNamesJoinOffline() {
@@ -236,8 +232,6 @@ class LoginResolverTest {
         mojang.failing = false;
         assertNull(resolver.offlineRegistrationRefusal("Notch"));
     }
-
-    // ---- Account resolution ----
 
     @Test
     void premiumPlayerWithoutLinkedAccountMustRegister() {

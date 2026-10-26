@@ -15,9 +15,6 @@ public final class Uuids {
         return UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Parses a UUID written without dashes, as the Mojang API returns them.
-     */
     public static UUID fromUndashed(String undashed) {
         if (undashed.length() != 32) {
             throw new IllegalArgumentException("Not an undashed UUID: " + undashed);

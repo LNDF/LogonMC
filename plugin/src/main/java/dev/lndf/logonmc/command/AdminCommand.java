@@ -255,7 +255,6 @@ public final class AdminCommand implements SimpleCommand {
                 return Uuids.fromUndashed(value);
             }
         } catch (IllegalArgumentException ignored) {
-            // Not a UUID: treat it as a name.
         }
         return null;
     }
