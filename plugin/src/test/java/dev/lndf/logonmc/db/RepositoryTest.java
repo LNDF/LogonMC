@@ -170,4 +170,59 @@ class RepositoryTest {
             assertEquals(0, new SchemaMigrator(db).migrate());
         }
     }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("databases")
+    void narrowUpdatesLeaveOtherFieldsAlone(String name, Function<Path, Database> factory) {
+        try (Database db = open(factory)) {
+            UserRepository users = new UserRepository(db);
+            HashedPassword original = new HashedPassword("$argon2id$old", HashAlgorithm.ARGON2ID);
+            HashedPassword reset = new HashedPassword("$argon2id$new", HashAlgorithm.ARGON2ID);
+            StoredUser user = StoredUser.create(UUID.randomUUID(), "Steve");
+            user.password(original);
+            users.insert(user);
+
+            // A copy read before a reset must not roll it back through a metadata or link write.
+            StoredUser stale = users.findByUuid(user.uuid()).orElseThrow();
+            assertTrue(users.updatePassword(user.uuid(), reset));
+            stale.lastSeen(Instant.ofEpochMilli(1234));
+            stale.lastIp("192.0.2.1");
+            stale.lastServer("lobby");
+            users.updateMetadata(stale);
+            stale.premiumUuid(UUID.randomUUID());
+            users.updateLink(stale);
+
+            StoredUser stored = users.findByUuid(user.uuid()).orElseThrow();
+            assertEquals(reset.hash(), stored.password().hash());
+            assertEquals(Instant.ofEpochMilli(1234), stored.lastSeen());
+            assertEquals("192.0.2.1", stored.lastIp());
+            assertEquals("lobby", stored.lastServer());
+            assertEquals(stale.premiumUuid(), stored.premiumUuid());
+            assertTrue(users.findCrackedByName("Steve").isEmpty());
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("databases")
+    void replacePasswordOnlyFromExpected(String name, Function<Path, Database> factory) {
+        try (Database db = open(factory)) {
+            UserRepository users = new UserRepository(db);
+            HashedPassword first = new HashedPassword("$argon2id$a", HashAlgorithm.ARGON2ID);
+            HashedPassword second = new HashedPassword("$argon2id$b", HashAlgorithm.ARGON2ID);
+            HashedPassword third = new HashedPassword("$2a$12$c", HashAlgorithm.BCRYPT);
+            StoredUser user = StoredUser.create(UUID.randomUUID(), "Alex");
+            users.insert(user);
+
+            assertTrue(users.replacePassword(user.uuid(), null, first));
+            assertFalse(users.replacePassword(user.uuid(), null, second));
+            assertTrue(users.replacePassword(user.uuid(), first, second));
+            assertFalse(users.replacePassword(user.uuid(), first, third));
+            StoredUser stored = users.findByUuid(user.uuid()).orElseThrow();
+            assertEquals(second.hash(), stored.password().hash());
+
+            users.delete(user.uuid());
+            assertFalse(users.replacePassword(user.uuid(), second, third));
+            assertFalse(users.updatePassword(user.uuid(), third));
+        }
+    }
 }

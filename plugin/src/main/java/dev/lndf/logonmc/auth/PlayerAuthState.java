@@ -67,12 +67,7 @@ public final class PlayerAuthState {
         return premiumSuggested.compareAndSet(false, true);
     }
 
-    /**
-     * Claims the player's single password check. Commands that check or hash a password run one
-     * at a time per player, so a flood of them can't run many guesses in parallel.
-     *
-     * @return false if a check is already running or the wrong-password delay hasn't passed
-     */
+    /** @return false if a check is running or the wrong-password delay hasn't passed */
     boolean beginPasswordCheck() {
         return passwordCheck.compareAndSet(false, true);
     }
@@ -94,12 +89,13 @@ public final class PlayerAuthState {
         }
     }
 
-    /**
-     * The player disconnected: stops the prompt and any prompt started later.
-     */
     synchronized void close() {
         closed = true;
         cancelTasks();
+    }
+
+    synchronized boolean isClosed() {
+        return closed;
     }
 
     synchronized void cancelTasks() {

@@ -9,10 +9,7 @@ public final class Ips {
     private Ips() {
     }
 
-    /**
-     * Key for per-client limits: the address for IPv4, the /64 prefix for IPv6, since one
-     * client usually controls a whole /64 and could otherwise rotate through it for free.
-     */
+    /** IPv6 is keyed by /64: one client usually controls a whole /64 and could rotate through it. */
     public static String limitKey(InetAddress address) {
         if (address instanceof Inet6Address) {
             byte[] bytes = address.getAddress();

@@ -155,7 +155,7 @@ public final class AdminCommand implements SimpleCommand {
 
     private void setPassword(CommandSource source, StoredUser user, String password) {
         user.password(plugin.hashers().hash(password));
-        users.update(user);
+        users.updatePassword(user.uuid(), user.password());
         sessions.delete(user.uuid());
         auth.refreshUser(user.uuid(), user);
         source.sendMessage(plugin.messages().get("admin.password-set", arg("name", user.lastNickname())));
@@ -206,7 +206,7 @@ public final class AdminCommand implements SimpleCommand {
             return;
         }
         user.premiumUuid(null);
-        users.update(user);
+        users.updateLink(user);
         auth.refreshUser(user.uuid(), user);
         plugin.proxy().getPlayer(user.uuid()).ifPresent(p -> p.disconnect(plugin.messages().get("kick.cracked-rejoin")));
         source.sendMessage(plugin.messages().get("admin.cracked-set", arg("name", user.lastNickname())));

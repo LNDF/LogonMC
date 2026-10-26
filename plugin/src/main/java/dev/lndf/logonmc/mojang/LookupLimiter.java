@@ -11,8 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
- * Caps the Mojang lookups joins from one IP can cause, so a single client can't get the proxy
- * rate limited by Mojang. Fixed windows per IP; settings are read on every call.
+ * Caps the Mojang lookups joins from one IP can cause, so one client can't get the proxy rate
+ * limited by Mojang.
  */
 public final class LookupLimiter {
 
@@ -30,11 +30,6 @@ public final class LookupLimiter {
         this.settings = settings;
     }
 
-    /**
-     * Counts one lookup for this IP.
-     *
-     * @return false if the IP has used up its lookups for the current window
-     */
     public boolean tryAcquire(InetAddress ip) {
         PluginConfig.LookupLimit limit = settings.get();
         if (limit.maxLookupsPerIp() <= 0) {

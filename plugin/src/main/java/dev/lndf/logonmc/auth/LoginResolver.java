@@ -96,8 +96,6 @@ public final class LoginResolver {
 
     /**
      * Pre-login: validate the name and choose online (Mojang) or offline authentication.
-     *
-     * @param source the connecting client's IP, which pays for Mojang lookups its join causes
      */
     public Decision decide(String name, InetAddress source) {
         PluginConfig cfg = config.get();
@@ -127,8 +125,8 @@ public final class LoginResolver {
         }
 
         // 2. Nobody here owns the name. Mojang says whether it is premium, and whose it is.
-        // Refused outright, never let in as cracked: otherwise a client could make its own lookups
-        // fail and register a premium name.
+        // Refused, not let in as cracked: otherwise a client could fail its own lookups on purpose
+        // and register a premium name.
         if (!mojang.isCached(name) && !lookupLimiter.tryAcquire(source)) {
             logger.info("Refusing {} from {}: Mojang lookup limit reached", name, source.getHostAddress());
             return Decision.deny("kick.lookup-limit");
@@ -160,9 +158,8 @@ public final class LoginResolver {
     }
 
     /**
-     * Checked again at /register for a player who joined in offline mode: refuses a protected
-     * premium name, which gets in as cracked when the Mojang lookup at join failed. Blocks on the
-     * Mojang lookup.
+     * A protected premium name can join offline when the Mojang lookup failed, so /register
+     * checks it again.
      *
      * @return the messages.yml key to refuse with, or null to allow the registration
      */
@@ -209,7 +206,7 @@ public final class LoginResolver {
             if (!user.lastNickname().equals(name)) {
                 String oldName = user.lastNickname();
                 user.lastNickname(name);
-                users.update(user);
+                users.updateLink(user);
                 logger.info("Linked player {} changed name from {} to {}", premiumUuid, oldName, name);
                 eventFirer.apply(new PremiumNameChangeEvent(user.uuid(), oldName, name)).join();
             }
@@ -262,7 +259,7 @@ public final class LoginResolver {
     public StoredUser link(StoredUser user, String name, UUID premiumUuid) {
         user.lastNickname(name);
         user.premiumUuid(premiumUuid);
-        users.update(user);
+        users.updateLink(user);
         logger.info("Linked account {} to premium UUID {}", name, premiumUuid);
         if (config.get().premium().switchUuidOnPremium()) {
             switchUuid(user, premiumUuid);

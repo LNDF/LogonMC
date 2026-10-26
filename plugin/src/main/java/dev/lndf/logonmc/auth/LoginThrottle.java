@@ -11,9 +11,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Wrong passwords counted across reconnects, per IP and per account. A limit locks out password
- * attempts until the lockout duration passes without another wrong password. Settings are read
- * on every call, so a reload applies to existing counters.
+ * Wrong passwords per IP and per account, kept across reconnects. A lockout lasts until the
+ * lockout duration passes without another wrong password.
  */
 public final class LoginThrottle {
 
@@ -45,10 +44,7 @@ public final class LoginThrottle {
         increment(accountKey(account), lockout, now);
     }
 
-    /**
-     * Forgets the wrong passwords of an account after its owner logged in. The IP's count stays, or
-     * an attacker could reset it by logging in to an account of their own between guesses.
-     */
+    // The IP's count stays, or an attacker could reset it by logging in to their own account.
     public void recordSuccess(UUID account) {
         failures.invalidate(accountKey(account));
     }

@@ -30,6 +30,7 @@ import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import net.kyori.adventure.text.Component;
@@ -50,7 +51,7 @@ public final class LogonMCPlugin {
     private final Path dataDirectory;
     private final ConfigLoader configLoader;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-    // Password hashing, sized by auth.hash-threads. Callers wait on the plugin executor.
+    // Unbounded on purpose: executeHash enforces auth.hash-queue-size, which a reload can change.
     private final ThreadPoolExecutor hashExecutor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(), Thread.ofPlatform().name("LogonMC-hash-", 0).daemon().factory());
 
@@ -91,6 +92,8 @@ public final class LogonMCPlugin {
         LoginResolver resolver = new LoginResolver(users, mojang, this::config,
                 e -> proxy.getEventManager().fire(e), logger);
         AuthService auth = new AuthService(this, users, sessions, mojang, resolver);
+        // Before commands exist, so no password is ever checked against an empty list.
+        readUnsafePasswords();
 
         proxy.getEventManager().register(this, new ConnectionListener(this, resolver, auth));
         proxy.getEventManager().register(this, new GuardListener(this, auth));
@@ -100,7 +103,6 @@ public final class LogonMCPlugin {
                 new AdminCommand(this, auth, resolver, users, sessions, mojang));
         auth.purgeSessionsLater();
 
-        loadUnsafePasswords();
         LogonMCProvider.register(new LogonMCImpl(this, auth, users, sessions));
         logger.info("LogonMC {} enabled ({} database, auth server '{}')",
                 BuildConstants.VERSION, config.database().type(), config.servers().auth());
@@ -127,7 +129,14 @@ public final class LogonMCPlugin {
         this.config = loaded;
         this.messages = loadedMessages;
         resizeHashExecutor(loaded.auth().hashThreads());
-        this.hashers = new Hashers(loaded.auth().hashAlgorithm(), hashExecutor);
+        this.hashers = new Hashers(loaded.auth().hashAlgorithm(), this::executeHash);
+    }
+
+    private void executeHash(Runnable task) {
+        if (hashExecutor.getQueue().size() >= config.auth().hashQueueSize()) {
+            throw new RejectedExecutionException("Password hashing queue is full");
+        }
+        hashExecutor.execute(task);
     }
 
     private void resizeHashExecutor(int threads) {
@@ -145,19 +154,23 @@ public final class LogonMCPlugin {
      * Reads the unsafe-password lists in the background; the previous lists stay in use meanwhile.
      */
     private void loadUnsafePasswords() {
+        async(this::readUnsafePasswords);
+    }
+
+    private void readUnsafePasswords() {
         PluginConfig.UnsafePasswords settings = config.auth().unsafePasswords();
         if (!settings.enabled()) {
             return;
         }
-        async(() -> {
-            try {
-                long start = System.nanoTime();
-                int count = unsafePasswords.load(configLoader.unsafeListsDirectory(), settings.caseSensitive());
-                logger.info("Loaded {} unsafe passwords in {} ms", count, (System.nanoTime() - start) / 1_000_000);
-            } catch (IOException e) {
-                logger.error("Could not read the unsafe password lists; keeping the previous ones", e);
-            }
-        });
+        try {
+            long start = System.nanoTime();
+            int count = unsafePasswords.load(configLoader.unsafeListsDirectory(), settings.caseSensitive());
+            logger.info("Loaded {} unsafe passwords in {} ms", count, (System.nanoTime() - start) / 1_000_000);
+        } catch (IOException e) {
+            logger.error(unsafePasswords.isLoaded()
+                    ? "Could not read the unsafe password lists; keeping the previous ones"
+                    : "Could not read the unsafe password lists; new passwords are refused until /logonmc reload loads them", e);
+        }
     }
 
     /**
@@ -207,6 +220,10 @@ public final class LogonMCPlugin {
 
     public Hashers hashers() {
         return hashers;
+    }
+
+    public boolean unsafePasswordsUnavailable() {
+        return config.auth().unsafePasswords().enabled() && !unsafePasswords.isLoaded();
     }
 
     public boolean isUnsafePassword(String password) {

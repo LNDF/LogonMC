@@ -3,8 +3,16 @@ package dev.lndf.logonmc.crypto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class HashersTest {
@@ -58,5 +66,39 @@ class HashersTest {
         HashedPassword argon = hashers.hash("pw123456");
         assertEquals(HashAlgorithm.ARGON2ID, argon.algorithm());
         assertFalse(hashers.needsRehash(argon));
+    }
+
+    @Test
+    void abandonedHashIsSkipped() {
+        Hashers hashers = new Hashers(HashAlgorithm.ARGON2ID, Runnable::run);
+        HashedPassword hash = hashers.hash("pw123456");
+        AtomicBoolean ran = new AtomicBoolean();
+        assertThrows(CancellationException.class, () -> hashers.verify("pw123456", hash, () -> {
+            ran.set(true);
+            return true;
+        }));
+        assertTrue(ran.get());
+        assertTrue(hashers.verify("pw123456", hash, () -> false));
+    }
+
+    @Test
+    void fullQueueRejects() throws Exception {
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1));
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            pool.execute(() -> {
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            pool.execute(() -> { });
+            Hashers hashers = new Hashers(HashAlgorithm.ARGON2ID, pool);
+            assertThrows(RejectedExecutionException.class, () -> hashers.hash("pw123456"));
+        } finally {
+            release.countDown();
+            pool.shutdown();
+        }
     }
 }

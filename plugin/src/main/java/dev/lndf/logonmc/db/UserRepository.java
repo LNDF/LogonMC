@@ -97,8 +97,64 @@ public final class UserRepository {
         });
     }
 
+    /** Writes every field: a stale copy would roll back later changes, such as a password reset. */
     public void update(StoredUser user) {
         database.query(connection -> update(connection, user));
+    }
+
+    public void updateMetadata(StoredUser user) {
+        database.query(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE logonmc_users SET last_seen = ?, last_ip = ?, last_server = ? WHERE uuid = ?")) {
+                setInstant(ps, 1, user.lastSeen());
+                setNullable(ps, 2, user.lastIp());
+                setNullable(ps, 3, user.lastServer());
+                ps.setString(4, user.uuid().toString());
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    public void updateLink(StoredUser user) {
+        database.query(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement("UPDATE logonmc_users SET premium_uuid = ?, "
+                    + "last_nickname = ?, last_nickname_lower = ?, reserved_name = ? WHERE uuid = ?")) {
+                setNullable(ps, 1, user.premiumUuid() == null ? null : user.premiumUuid().toString());
+                ps.setString(2, user.lastNickname());
+                ps.setString(3, lower(user.lastNickname()));
+                setNullable(ps, 4, user.isLinked() ? null : lower(user.lastNickname()));
+                ps.setString(5, user.uuid().toString());
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    public boolean updatePassword(UUID uuid, @Nullable HashedPassword password) {
+        return database.query(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE logonmc_users SET password_hash = ?, hash_algo = ? WHERE uuid = ?")) {
+                setNullable(ps, 1, password == null ? null : password.hash());
+                setNullable(ps, 2, password == null ? null : password.algorithm().name());
+                ps.setString(3, uuid.toString());
+                return ps.executeUpdate() > 0;
+            }
+        });
+    }
+
+    /** @return false if the stored password is no longer {@code expected} or the account is gone */
+    public boolean replacePassword(UUID uuid, @Nullable HashedPassword expected, HashedPassword replacement) {
+        return database.query(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement("UPDATE logonmc_users SET password_hash = ?, "
+                    + "hash_algo = ? WHERE uuid = ? AND " + (expected == null ? "password_hash IS NULL" : "password_hash = ?"))) {
+                ps.setString(1, replacement.hash());
+                ps.setString(2, replacement.algorithm().name());
+                ps.setString(3, uuid.toString());
+                if (expected != null) {
+                    ps.setString(4, expected.hash());
+                }
+                return ps.executeUpdate() > 0;
+            }
+        });
     }
 
     int update(Connection connection, StoredUser user) throws SQLException {

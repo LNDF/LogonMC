@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import dev.lndf.logonmc.config.PluginConfig;
 import dev.lndf.logonmc.util.Uuids;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -26,19 +27,17 @@ import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Name to premium-profile lookups, cached (including misses) per name.
- *
- * <p>Requests go to the Mojang API from each configured local address in rotation, so the
- * per-IP rate limit applies to each address separately. When every address is rate limited or
- * failing, the configured proxy URLs are tried in order. An endpoint that was rate limited or
- * unreachable is skipped until its backoff ends instead of piling up requests.
+ * Name to premium-profile lookups, cached (including misses) per name. Mojang is asked from each
+ * configured local address in rotation, since its rate limit is per IP; the proxy URLs are only
+ * tried once every address is rate limited or failing.
  */
 public final class MojangClient implements ProfileLookup {
 
     static final String MOJANG_URL = "https://api.mojang.com/users/profiles/minecraft/{name}";
     private static final Duration BACKOFF = Duration.ofSeconds(30);
+    // A profile is about 100 bytes.
+    static final int MAX_BODY_BYTES = 64 * 1024;
 
-    /** One place to send a lookup: a URL template and the client (local address) to send it with. */
     private static final class Endpoint {
         final String urlTemplate;
         final String description;
@@ -58,7 +57,6 @@ public final class MojangClient implements ProfileLookup {
         }
     }
 
-    /** Endpoints built from the settings they came from, rebuilt when a reload changes those. */
     private record Endpoints(PluginConfig.LookupSources sources, List<Endpoint> mojang, List<Endpoint> proxies) {
     }
 
@@ -127,9 +125,18 @@ public final class MojangClient implements ProfileLookup {
                 .header("Accept", "application/json")
                 .GET()
                 .build();
-        HttpResponse<String> response;
+        int status;
+        String body;
         try {
-            response = endpoint.http.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<InputStream> response = endpoint.http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            status = response.statusCode();
+            try (InputStream in = response.body()) {
+                byte[] bytes = in.readNBytes(MAX_BODY_BYTES + 1);
+                if (bytes.length > MAX_BODY_BYTES) {
+                    throw new LookupException("response larger than " + MAX_BODY_BYTES + " bytes", null);
+                }
+                body = new String(bytes, StandardCharsets.UTF_8);
+            }
         } catch (IOException e) {
             endpoint.backoffUntil = Instant.now().plus(BACKOFF);
             throw new LookupException("unreachable (" + e + ")", e);
@@ -137,14 +144,14 @@ public final class MojangClient implements ProfileLookup {
             Thread.currentThread().interrupt();
             throw new LookupException("interrupted", e);
         }
-        return switch (response.statusCode()) {
-            case 200 -> Optional.of(parse(response.body()));
+        return switch (status) {
+            case 200 -> Optional.of(parse(body));
             case 204, 404 -> Optional.empty();
             case 429 -> {
                 endpoint.backoffUntil = Instant.now().plus(BACKOFF);
                 throw new LookupException("rate limited (429)", null);
             }
-            default -> throw new LookupException("HTTP " + response.statusCode(), null);
+            default -> throw new LookupException("HTTP " + status, null);
         };
     }
 
@@ -172,7 +179,8 @@ public final class MojangClient implements ProfileLookup {
             JsonObject json = JsonParser.parseString(body).getAsJsonObject();
             return new MojangProfile(Uuids.fromUndashed(json.get("id").getAsString()), json.get("name").getAsString());
         } catch (JsonParseException | IllegalStateException | NullPointerException | IllegalArgumentException e) {
-            throw new LookupException("unexpected response: " + body, e);
+            throw new LookupException("unexpected response: "
+                    + (body.length() > 200 ? body.substring(0, 200) + "..." : body), e);
         }
     }
 }

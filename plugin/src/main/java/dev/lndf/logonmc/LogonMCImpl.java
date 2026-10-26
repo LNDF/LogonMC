@@ -100,7 +100,7 @@ final class LogonMCImpl implements LogonMC {
             }
             HashedPassword hash = plugin.hashers().hash(password);
             user.get().password(hash);
-            users.update(user.get());
+            users.updatePassword(uuid, hash);
             sessions.delete(uuid);
             auth.refreshUser(uuid, user.get());
             return true;

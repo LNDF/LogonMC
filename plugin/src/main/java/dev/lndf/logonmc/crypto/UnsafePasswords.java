@@ -25,6 +25,7 @@ public final class UnsafePasswords {
     }
 
     private volatile Snapshot snapshot = new Snapshot(new long[0], false);
+    private volatile boolean loaded;
 
     /**
      * Replaces the list with the contents of every .txt file in {@code directory}. Blank lines are
@@ -67,6 +68,7 @@ public final class UnsafePasswords {
             }
         }
         snapshot = new Snapshot(Arrays.copyOf(sorted, distinct), caseSensitive);
+        loaded = true;
         return distinct;
     }
 
@@ -74,6 +76,10 @@ public final class UnsafePasswords {
         Snapshot current = snapshot;
         return current.hashes().length > 0
                 && Arrays.binarySearch(current.hashes(), hash(normalize(password, current.caseSensitive()))) >= 0;
+    }
+
+    public boolean isLoaded() {
+        return loaded;
     }
 
     public int size() {

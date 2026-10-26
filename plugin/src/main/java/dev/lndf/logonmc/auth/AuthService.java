@@ -30,7 +30,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import net.kyori.adventure.bossbar.BossBar;
@@ -54,16 +56,14 @@ public final class AuthService {
     private final ProfileLookup mojang;
     private final LoginResolver resolver;
 
-    /** Online players sharing one IP before the session warning is logged. */
     private static final int SHARED_IP_WARNING = 5;
 
-    // Keyed by the Player instance, not the UUID: a second connection with the same name gets its
-    // own Player, and its LoginEvent or DisconnectEvent must not touch the online player's state.
+    // Keyed by Player, not UUID: Velocity fires LoginEvent/DisconnectEvent for a rejected duplicate
+    // login, which must not touch the online player's state.
     private final Map<Player, PlayerAuthState> states = new ConcurrentHashMap<>();
     // Accounts resolved during GameProfileRequestEvent, picked up by LoginEvent. Keyed by profile
-    // UUID. Entries of connections that never reach LoginEvent expire: the client sends nothing
-    // while it waits for the login to finish, so Velocity's read timeout (30 s by default) has
-    // closed such a connection long before.
+    // UUID. Velocity's read timeout (30 s) closes connections that never reach LoginEvent, so older
+    // entries are dead.
     private final Cache<UUID, Optional<StoredUser>> pendingProfiles = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofMinutes(1)).build();
     // Logins refused during GameProfileRequestEvent, by profile UUID, with the kick message key.
@@ -131,7 +131,7 @@ public final class AuthService {
         }
         if (state.isAuthenticated() && user != null) {
             user.lastIp(ip(player));
-            users.update(user);
+            users.updateMetadata(user);
         }
         states.put(player, state);
     }
@@ -147,10 +147,6 @@ public final class AuthService {
         warnIfSharedIp(player);
     }
 
-    /**
-     * Sessions trust the IP alone, so many players on one IP, usually a reverse proxy without
-     * PROXY protocol, let them take over each other's accounts. Logged at most once an hour.
-     */
     private void warnIfSharedIp(Player player) {
         if (!config().session().enabled()) {
             return;
@@ -189,6 +185,13 @@ public final class AuthService {
      * server unauthenticated (after /logout) starts the login prompt.
      */
     public void serverPostConnect(Player player, boolean firstServer) {
+        if (!isAuthenticated(player) && !isOnAuthServer(player)) {
+            // Last resort behind GuardListener.
+            plugin.logger().warn("{} reached {} without logging in; disconnecting", player.getUsername(),
+                    player.getCurrentServer().map(c -> c.getServerInfo().getName()).orElse("?"));
+            player.disconnect(messages().get("kick.not-authenticated"));
+            return;
+        }
         if (firstServer) {
             firstServerJoined(player);
             return;
@@ -233,7 +236,7 @@ public final class AuthService {
         if (state.isAuthenticated() && user != null) {
             user.lastSeen(Instant.now());
             user.lastServer(state.lastServer());
-            plugin.async(() -> users.update(user));
+            plugin.async(() -> users.updateMetadata(user));
         }
     }
 
@@ -295,13 +298,26 @@ public final class AuthService {
             return;
         }
         passwordCheck(player, state, () -> {
-            if (throttle.isLockedOut(user.uuid(), address(player))) {
+            UUID account = user.uuid();
+            InetAddress address = address(player);
+            if (throttle.isLockedOut(account, address)) {
                 player.disconnect(messages().get("kick.locked-out", lockoutMinutes()));
                 return false;
             }
             HashedPassword hash = user.password();
-            if (hash == null || !plugin.hashers().verify(password, hash)) {
-                throttle.recordFailure(user.uuid(), address(player));
+            boolean correct;
+            try {
+                // Skipped if a lockout starts while queued for a hashing thread.
+                correct = hash != null && plugin.hashers().verify(password, hash,
+                        () -> state.isClosed() || throttle.isLockedOut(account, address));
+            } catch (CancellationException e) {
+                if (!state.isClosed()) {
+                    player.disconnect(messages().get("kick.locked-out", lockoutMinutes()));
+                }
+                return false;
+            }
+            if (!correct) {
+                throttle.recordFailure(account, address);
                 int failures = state.recordFailure();
                 int remaining = config().auth().maxAttempts() - failures;
                 if (remaining <= 0) {
@@ -311,12 +327,27 @@ public final class AuthService {
                 }
                 return true;
             }
-            throttle.recordSuccess(user.uuid());
-            if (plugin.hashers().needsRehash(hash)) {
-                user.password(plugin.hashers().hash(password));
+            // The account may have been reset or deleted, or locked out, during the verification.
+            if (throttle.isLockedOut(account, address)) {
+                player.disconnect(messages().get("kick.locked-out", lockoutMinutes()));
+                return false;
             }
-            user.lastIp(ip(player));
-            users.update(user);
+            Optional<StoredUser> current = currentAccount(user, hash);
+            if (current.isEmpty()) {
+                player.sendMessage(messages().get("auth.account-changed"));
+                return false;
+            }
+            StoredUser fresh = current.get();
+            throttle.recordSuccess(account);
+            if (plugin.hashers().needsRehash(hash)) {
+                HashedPassword upgraded = plugin.hashers().hash(password, state::isClosed);
+                if (users.replacePassword(account, hash, upgraded)) {
+                    fresh.password(upgraded);
+                }
+            }
+            fresh.lastIp(ip(player));
+            users.updateMetadata(fresh);
+            state.user(fresh);
             player.sendMessage(messages().get("auth.logged-in"));
             authenticate(player, state, AuthReason.LOGIN);
             return false;
@@ -362,10 +393,14 @@ public final class AuthService {
             if (!exists) {
                 user = StoredUser.create(player.getUniqueId(), player.getUsername());
             }
-            user.password(plugin.hashers().hash(password));
+            user.password(plugin.hashers().hash(password, state::isClosed));
             user.lastIp(ip(player));
             if (exists) {
-                users.update(user);
+                if (!users.replacePassword(user.uuid(), null, user.password())) {
+                    player.sendMessage(messages().get("auth.account-changed"));
+                    return false;
+                }
+                users.updateMetadata(user);
             } else {
                 users.insert(user);
             }
@@ -390,11 +425,15 @@ public final class AuthService {
         StoredUser user = state.user();
         passwordCheck(player, state, () -> {
             HashedPassword current = user.password();
-            if (current != null && !confirmPassword(player, user, oldPassword)) {
+            if (current != null && !confirmPassword(player, state, user, oldPassword)) {
                 return true;
             }
-            user.password(plugin.hashers().hash(newPassword));
-            users.update(user);
+            HashedPassword replacement = plugin.hashers().hash(newPassword, state::isClosed);
+            if (!users.replacePassword(user.uuid(), current, replacement)) {
+                player.sendMessage(messages().get("auth.account-changed"));
+                return false;
+            }
+            user.password(replacement);
             sessions.delete(user.uuid());
             player.sendMessage(messages().get("auth.password-changed"));
             return false;
@@ -434,7 +473,7 @@ public final class AuthService {
             return;
         }
         passwordCheck(player, state, () -> {
-            if (!confirmPassword(player, user, password)) {
+            if (!confirmPassword(player, state, user, password)) {
                 return true;
             }
             Optional<MojangProfile> profile;
@@ -478,7 +517,7 @@ public final class AuthService {
                 return;
             }
             user.premiumUuid(null);
-            users.update(user);
+            users.updateLink(user);
             player.disconnect(messages().get("kick.cracked-rejoin"));
         });
     }
@@ -491,7 +530,7 @@ public final class AuthService {
             return;
         }
         passwordCheck(player, state, () -> {
-            if (user.hasPassword() && !confirmPassword(player, user, password)) {
+            if (user.hasPassword() && !confirmPassword(player, state, user, password)) {
                 return true;
             }
             users.delete(user.uuid());
@@ -533,6 +572,9 @@ public final class AuthService {
     }
 
     private void authenticate(Player player, PlayerAuthState state, AuthReason reason) {
+        if (state.isClosed()) {
+            return;
+        }
         state.reason(reason);
         state.cancelTasks();
         player.clearTitle();
@@ -651,6 +693,9 @@ public final class AuthService {
         if (password.toLowerCase(Locale.ROOT).equals(player.getUsername().toLowerCase(Locale.ROOT))) {
             return messages().get("auth.password-is-name");
         }
+        if (plugin.unsafePasswordsUnavailable()) {
+            return messages().get("auth.password-check-unavailable");
+        }
         if (plugin.isUnsafePassword(password)) {
             return messages().get("auth.password-unsafe");
         }
@@ -663,10 +708,6 @@ public final class AuthService {
         boolean run();
     }
 
-    /**
-     * Runs a command that checks or hashes a password on the executor, as the player's single
-     * password check. After a wrong password the next check waits for auth.wrong-password-delay.
-     */
     private void passwordCheck(Player player, PlayerAuthState state, PasswordTask task) {
         if (!state.beginPasswordCheck()) {
             player.sendMessage(messages().get("auth.wait"));
@@ -675,7 +716,13 @@ public final class AuthService {
         plugin.async(() -> {
             boolean wrong = false;
             try {
-                wrong = task.run();
+                if (!state.isClosed()) {
+                    wrong = task.run();
+                }
+            } catch (RejectedExecutionException e) {
+                player.sendMessage(messages().get("auth.busy"));
+            } catch (CancellationException e) {
+                // The hash was skipped because the player left.
             } catch (RuntimeException e) {
                 plugin.logger().error("Authentication action failed for {}", player.getUsername(), e);
                 player.sendMessage(messages().get("auth.error"));
@@ -690,23 +737,45 @@ public final class AuthService {
         });
     }
 
-    /**
-     * The password check of commands run while logged in. Wrong passwords count towards the
-     * lockout like failed logins, so these commands can't be used to guess the password instead.
-     * Call inside {@link #passwordCheck}.
-     */
-    private boolean confirmPassword(Player player, StoredUser user, @Nullable String password) {
-        if (throttle.isLockedOut(user.uuid(), address(player))) {
+    // Counts towards the lockout, or these commands could be used to guess the password.
+    private boolean confirmPassword(Player player, PlayerAuthState state, StoredUser user, @Nullable String password) {
+        UUID account = user.uuid();
+        InetAddress address = address(player);
+        if (throttle.isLockedOut(account, address)) {
             player.sendMessage(messages().get("auth.locked-out", lockoutMinutes()));
             return false;
         }
         HashedPassword hash = user.password();
-        if (hash == null || password == null || !plugin.hashers().verify(password, hash)) {
-            throttle.recordFailure(user.uuid(), address(player));
+        boolean correct;
+        try {
+            correct = hash != null && password != null && plugin.hashers().verify(password, hash,
+                    () -> state.isClosed() || throttle.isLockedOut(account, address));
+        } catch (CancellationException e) {
+            if (!state.isClosed()) {
+                player.sendMessage(messages().get("auth.locked-out", lockoutMinutes()));
+            }
+            return false;
+        }
+        if (!correct) {
+            throttle.recordFailure(account, address);
             player.sendMessage(messages().get("auth.wrong-password", arg("remaining", "-")));
             return false;
         }
+        if (throttle.isLockedOut(account, address)) {
+            player.sendMessage(messages().get("auth.locked-out", lockoutMinutes()));
+            return false;
+        }
+        if (currentAccount(user, hash).isEmpty()) {
+            player.sendMessage(messages().get("auth.account-changed"));
+            return false;
+        }
         return true;
+    }
+
+    /** Empty if the account was deleted or its password changed, possibly by another proxy. */
+    private Optional<StoredUser> currentAccount(StoredUser user, HashedPassword verified) {
+        return users.findByUuid(user.uuid())
+                .filter(current -> current.password() != null && current.password().hash().equals(verified.hash()));
     }
 
     private TagResolver lockoutMinutes() {

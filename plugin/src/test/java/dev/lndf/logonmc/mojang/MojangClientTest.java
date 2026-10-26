@@ -38,6 +38,7 @@ class MojangClientTest {
         respond("/limited/", 429, "");
         respond("/missing/", 404, "");
         respond("/broken/", 500, "");
+        respond("/huge/", 200, "x".repeat(MojangClient.MAX_BODY_BYTES + 1));
         server.start();
         base = "http://127.0.0.1:" + server.getAddress().getPort();
     }
@@ -116,6 +117,13 @@ class MojangClientTest {
         MojangClient client = client("/limited/", List.of(), List.of("/missing/", "/ok/"));
         assertTrue(client.lookup("one").isEmpty());
         assertEquals(0, hits("/ok/"));
+    }
+
+    @Test
+    void oversizedResponseFailsOver() throws Exception {
+        MojangClient client = client("/huge/", List.of(), List.of("/ok/"));
+        assertEquals("Notch", client.lookup("one").orElseThrow().name());
+        assertEquals(1, hits("/huge/"));
     }
 
     @Test

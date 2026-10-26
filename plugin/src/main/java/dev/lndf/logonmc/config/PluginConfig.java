@@ -40,7 +40,7 @@ public record PluginConfig(
 
     public record Auth(Duration loginTimeout, int maxAttempts, Duration wrongPasswordDelay, Lockout lockout,
                        int passwordMinLength, int passwordMaxLength, HashAlgorithm hashAlgorithm, int hashThreads,
-                       Set<String> allowedCommands, Duration reminderInterval, UnsafePasswords unsafePasswords,
+                       int hashQueueSize, Set<String> allowedCommands, Duration reminderInterval, UnsafePasswords unsafePasswords,
                        BossBarSettings bossBar) {
     }
 
@@ -115,6 +115,7 @@ public record PluginConfig(
                         auth.node("password-max-length").getInt(64),
                         enumValue(HashAlgorithm.class, auth.node("hash-algorithm").getString("ARGON2ID")),
                         hashThreads(auth.node("hash-threads").getInt(0)),
+                        Math.max(1, auth.node("hash-queue-size").getInt(256)),
                         auth.node("allowed-commands").getList(String.class, List.of("login", "l", "register", "reg"))
                                 .stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet()),
                         Duration.ofSeconds(Math.max(1, auth.node("reminder-interval-seconds").getLong(10))),
