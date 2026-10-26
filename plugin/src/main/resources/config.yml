@@ -116,3 +116,17 @@ premium:
   lookup-limit:
     max-lookups-per-ip: 10
     window-minutes: 10
+  # IP addresses of this machine to send Mojang lookups from, in rotation. Mojang's rate limit is
+  # per IP, so each address adds its own allowance. Empty uses the default route.
+  #   lookup-addresses:
+  #     - 203.0.113.10
+  #     - 203.0.113.11
+  lookup-addresses: []
+  # Lookup URLs tried in order once Mojang is rate limiting or failing on every address, e.g. a
+  # mirror you run. {name} is replaced by the player name. Each must answer exactly like
+  # https://api.mojang.com/users/profiles/minecraft/<name>: 200 with {"id": "<uuid without
+  # dashes>", "name": "<name>"}, or 204/404 when no account has the name. Their answers decide
+  # which names count as premium, so only use services you trust.
+  #   lookup-proxies:
+  #     - "https://mojang-mirror.example.com/users/profiles/minecraft/{name}"
+  lookup-proxies: []

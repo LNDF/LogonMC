@@ -87,7 +87,7 @@ public final class LogonMCPlugin {
 
         UserRepository users = new UserRepository(database);
         SessionRepository sessions = new SessionRepository(database);
-        MojangClient mojang = new MojangClient(config.premium().mojangCache());
+        MojangClient mojang = new MojangClient(config.premium().mojangCache(), () -> config().premium().lookupSources());
         LoginResolver resolver = new LoginResolver(users, mojang, this::config,
                 e -> proxy.getEventManager().fire(e), logger);
         AuthService auth = new AuthService(this, users, sessions, mojang, resolver);

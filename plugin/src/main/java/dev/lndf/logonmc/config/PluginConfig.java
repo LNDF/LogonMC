@@ -2,6 +2,13 @@ package dev.lndf.logonmc.config;
 
 import dev.lndf.logonmc.crypto.HashAlgorithm;
 import dev.lndf.logonmc.db.Dialect;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -54,7 +61,15 @@ public record PluginConfig(
     }
 
     public record Premium(boolean protectPremiumNames, boolean switchUuidOnPremium, boolean suggestPremium,
-                          boolean denyOnMojangError, Duration mojangCache, LookupLimit lookupLimit) {
+                          boolean denyOnMojangError, Duration mojangCache, LookupLimit lookupLimit,
+                          LookupSources lookupSources) {
+    }
+
+    /**
+     * @param addresses local addresses to send Mojang lookups from; empty for the default route
+     * @param proxies URL templates with {@code {name}}, answering like the Mojang API
+     */
+    public record LookupSources(List<InetAddress> addresses, List<String> proxies) {
     }
 
     /** A limit of 0 is disabled. */
@@ -131,9 +146,53 @@ public record PluginConfig(
                                 Math.max(0, premium.node("lookup-limit", "max-lookups-per-ip").getInt(10)),
                                 // At most a day, the lifetime of LookupLimiter entries.
                                 Duration.ofMinutes(Math.clamp(premium.node("lookup-limit", "window-minutes").getLong(10), 1, 1440))
+                        ),
+                        new LookupSources(
+                                localAddresses(premium.node("lookup-addresses").getList(String.class, List.of())),
+                                proxyUrls(premium.node("lookup-proxies").getList(String.class, List.of()))
                         )
                 )
         );
+    }
+
+    private static List<InetAddress> localAddresses(List<String> values) throws SerializationException {
+        List<InetAddress> addresses = new ArrayList<>();
+        for (String value : values) {
+            InetAddress address;
+            try {
+                address = InetAddress.ofLiteral(value.trim());
+            } catch (IllegalArgumentException e) {
+                throw new SerializationException("lookup-addresses: '" + value + "' is not an IP address");
+            }
+            // Binding fails for an address this machine doesn't have, which would fail every lookup.
+            try (Socket socket = new Socket()) {
+                socket.bind(new InetSocketAddress(address, 0));
+            } catch (IOException e) {
+                throw new SerializationException("lookup-addresses: " + value + " is not an address of this machine");
+            }
+            addresses.add(address);
+        }
+        return List.copyOf(addresses);
+    }
+
+    private static List<String> proxyUrls(List<String> values) throws SerializationException {
+        List<String> urls = new ArrayList<>();
+        for (String value : values) {
+            String url = value.trim();
+            if (!url.contains("{name}")) {
+                throw new SerializationException("lookup-proxies: '" + url + "' has no {name}");
+            }
+            try {
+                String scheme = new URI(url.replace("{name}", "x")).getScheme();
+                if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+                    throw new SerializationException("lookup-proxies: '" + url + "' is not an http(s) URL");
+                }
+            } catch (URISyntaxException e) {
+                throw new SerializationException("lookup-proxies: '" + url + "' is not a valid URL");
+            }
+            urls.add(url);
+        }
+        return List.copyOf(urls);
     }
 
     private static int hashThreads(int configured) {
